@@ -39,6 +39,9 @@ export type Ctx = {
   signal: AbortSignal
 }
 
+/** Who started an action and whether the owner approved it; a device that checks its own switches needs this. */
+export type RunContext = { origin: 'person' | 'agent'; approved: boolean; approvalId?: string; onWaiting?: () => void }
+
 export type ActionDef = {
   title: string
   scope: ScopeId
@@ -46,7 +49,7 @@ export type ActionDef = {
   args: ZodType
   /** The plain-words question for an approval, from the real arguments. Required for act and important actions. */
   describe?: (args: unknown, device?: Device) => string
-  run: (args: unknown, device?: Device) => Promise<unknown>
+  run: (args: unknown, device?: Device, how?: RunContext) => Promise<unknown>
   /** Only the owner may use it, from the dashboard; never offered to Mini. */
   personOnly?: boolean
 }

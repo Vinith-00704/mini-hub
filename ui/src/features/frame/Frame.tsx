@@ -3,7 +3,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
-import { Activity, Bot, House, PanelLeftClose, PanelLeftOpen, Settings, ShieldCheck } from 'lucide-react'
+import { Activity, Bot, House, PanelLeftClose, PanelLeftOpen, Settings, ShieldCheck, Smartphone } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { post } from '../../app/api.ts'
 import { useLive } from '../../app/live.ts'
@@ -17,6 +17,7 @@ import { TopBar } from './TopBar.tsx'
 const SECTIONS = [
   { to: '/', label: 'Home', icon: House },
   { to: '/mini', label: 'Mini', icon: Bot },
+  { to: '/devices', label: 'Devices', icon: Smartphone },
   { to: '/activity', label: 'Activity', icon: Activity },
 ] as const
 const LOWER = [
@@ -24,7 +25,7 @@ const LOWER = [
   { to: '/settings', label: 'Settings', icon: Settings },
 ] as const
 
-const TITLES: Record<string, string> = { '/': 'Home', '/mini': 'Mini', '/activity': 'Activity', '/permissions': 'Permissions', '/settings': 'Settings' }
+const TITLES: Record<string, string> = { '/': 'Home', '/mini': 'Mini', '/devices': 'Devices', '/activity': 'Activity', '/permissions': 'Permissions', '/settings': 'Settings' }
 
 
 function useLook(): void {
@@ -95,7 +96,7 @@ export function Frame() {
         </button>
       </nav>
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar title={TITLES[path] ?? 'Mini Hub'} />
+        <TopBar title={TITLES[path] ?? (path.startsWith('/devices/') ? 'Devices' : 'Mini Hub')} />
         {state.data?.stopped && (
           <div role="status" className="flex items-center gap-3 border-b border-danger/40 bg-danger/10 px-5 py-2 text-body">
             <span className="flex-1">Mini is stopped. Your data is still being collected.</span>

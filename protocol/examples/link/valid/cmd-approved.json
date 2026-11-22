@@ -1,0 +1,9 @@
+{
+  "t": "cmd",
+  "id": "c-2",
+  "name": "status",
+  "args": {},
+  "origin": "person",
+  "approved": true,
+  "approvalId": "a-9"
+}

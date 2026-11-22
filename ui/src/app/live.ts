@@ -20,7 +20,9 @@ export function useLive(): void {
       socket.onmessage = m => {
         const { topic } = JSON.parse(String(m.data)) as { topic: string }
         void client.invalidateQueries({ queryKey: [topic] })
-        if (topic === 'approvals' || topic === 'state' || topic === 'events') void client.invalidateQueries({ queryKey: ['state'] })
+        if (topic === 'approvals' || topic === 'state' || topic === 'events' || topic === 'devices') void client.invalidateQueries({ queryKey: ['state'] })
+        // A phone's state carries its own two lists, which the grants view shows.
+        if (topic === 'devices') void client.invalidateQueries({ queryKey: ['grants'] })
       }
       socket.onclose = () => {
         if (!closed) timer = setTimeout(open, RETRY_MS)

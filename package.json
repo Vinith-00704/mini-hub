@@ -5,12 +5,15 @@
   "workspaces": [
     "protocol",
     "core",
-    "ui"
+    "ui",
+    "shell"
   ],
   "scripts": {
     "dev": "node tools/dev.mjs",
     "test": "vitest run",
-    "check": "tsc -p protocol && tsc -p core && tsc -p ui"
+    "check": "tsc -p protocol && tsc -p core && tsc -p ui",
+    "build:shell": "npm run build -w @minihub/ui && node tools/bundle-core.mjs .build/core && npm run tauri -w @minihub/shell -- build",
+    "tauri": "npm run tauri -w @minihub/shell --"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

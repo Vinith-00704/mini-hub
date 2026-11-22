@@ -41,6 +41,16 @@ export function deviceRoutes(app: FastifyInstance, hub: Hub): void {
     })
   })
 
+  app.delete('/v1/devices/:id', { config: { access: 'person', audit: 'remove' } }, async req => {
+    const id = (req.params as { id: string }).id
+    const d = hub.devices.get(id)
+    if (!d || d.id === 'hub') throw new ApiFailure(404, 'not-found', 'There is no such device.')
+    if (d.connectorId !== 'android') throw new ApiFailure(400, 'bad-request', `${d.name} is part of the hub and cannot be removed.`)
+    const { deleteEvents } = z.object({ deleteEvents: z.boolean().optional() }).parse(req.body ?? {})
+    hub.removeDevice(id, deleteEvents === true)
+    return { removed: id }
+  })
+
   app.get('/v1/connectors', { config: { access: 'both' } }, async () => ({
     items: hub.registry.list().map(c => ({ id: c.manifest.id, name: c.manifest.name, kind: c.manifest.kind, icon: c.manifest.icon, ...c.health() })),
   }))

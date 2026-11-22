@@ -1,0 +1,16 @@
+{
+  "t": "events",
+  "from": 5,
+  "items": [
+    {
+      "seq": 5,
+      "type": "sms",
+      "occurredAt": 1795300000000
+    },
+    {
+      "seq": 7,
+      "type": "sms",
+      "occurredAt": 1795300000000
+    }
+  ]
+}

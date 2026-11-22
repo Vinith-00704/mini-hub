@@ -1,0 +1,10 @@
+{
+  "t": "state",
+  "brain": "ok",
+  "controlling": false,
+  "stopped": true,
+  "lists": {
+    "mini": {},
+    "pc": {}
+  }
+}

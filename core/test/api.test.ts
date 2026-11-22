@@ -84,6 +84,10 @@ describe('who may call', () => {
       ['GET', '/v1/approvals', undefined],
       ['GET', '/v1/audit/check', undefined],
       ['PATCH', '/v1/devices/pc', { name: 'x' }],
+      ['POST', '/v1/pairing', {}],
+      ['GET', '/v1/pairing', undefined],
+      ['POST', '/v1/pairing/confirm', {}],
+      ['POST', '/v1/pairing/cancel', {}],
     ] as const
     for (const [method, url, payload] of tries) {
       const r = await app.inject({ method, url, headers: asAgent, ...(payload ? { payload } : {}) })

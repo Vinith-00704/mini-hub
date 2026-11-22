@@ -122,3 +122,6 @@ desktop.ini
 
 # Plan workspaces of the build process (ledgers, briefs)
 /.superpowers/
+
+# Built app pieces (bundled core, node.exe) made by tools/bundle-core.mjs
+/.build/

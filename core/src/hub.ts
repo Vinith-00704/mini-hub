@@ -8,6 +8,12 @@ import { pcConnector, type Exec } from './connectors/pc.ts'
 import { DeviceStore, Registry } from './connectors/registry.ts'
 import type { Connector, Logger } from './connectors/types.ts'
 import { Events } from './events.ts'
+import { loadOrMakeCert } from './link/cert.ts'
+import { androidConnector } from './connectors/android.ts'
+import { Pairing } from './link/pairing.ts'
+import { Phones, type PhoneOptions } from './link/phones.ts'
+import { DeviceLink, type LinkOptions } from './link/server.ts'
+import { Tokens } from './link/tokens.ts'
 import { Approvals } from './rules/approvals.ts'
 import { Grants } from './rules/grants.ts'
 import { StopState } from './rules/stop.ts'
@@ -29,16 +35,24 @@ export type Hub = {
   devices: DeviceStore
   registry: Registry
   mini: MiniLink
+  /** The device link to phones; open only while a phone is paired or a pairing is under way. */
+  link: DeviceLink
+  tokens: Tokens
+  pairing: Pairing
+  phones: Phones
   log: Logger
   live: EventEmitter<{ topic: [LiveTopic] }>
   version: string
   dataDir?: string
   /** Stop Mini: refuse the agent, end control in the bot, answer every waiting question no. */
-  stopMini(by: 'person' | 'agent'): Promise<void>
+  stopMini(by: 'person' | 'agent' | 'device'): Promise<void>
+  /** Remove a phone: its token stops working at once, its link closes, and what it sent can go too. */
+  removeDevice(id: string, deleteEvents: boolean): void
   close(): Promise<void>
 }
 
-type Deps = { mini: MiniLink; exec?: Exec; log: Logger; now?: () => number; dataDir?: string }
+type LinkDeps = Partial<Pick<LinkOptions, 'port' | 'hosts' | 'announce' | 'pingMs' | 'name'>>
+type Deps = { mini: MiniLink; exec?: Exec; log: Logger; now?: () => number; dataDir?: string; link?: LinkDeps; phones?: PhoneOptions }
 
 const EXPIRE_EVERY_MS = 5000
 
@@ -54,6 +68,12 @@ export async function createHub(db: Store, deps: Deps): Promise<Hub> {
   const tickets = new Tickets()
   const devices = new DeviceStore(db, now)
   const events = new Events(db, grants, devices, now)
+  const tokens = new Tokens(db)
+  const link = new DeviceLink({ db, tokens, cert: await loadOrMakeCert(db), log: deps.log, now, ...deps.link })
+  const pairing = new Pairing({ link, tokens, devices, now, onChange: tell('devices') })
+  // Set below, once the hub exists: a phone's "Stop on my PC too" is the hub's own Stop.
+  let stopFromPhone: () => Promise<void> = async () => {}
+  const phones = new Phones({ db, link, events, devices, grants, log: deps.log, now, onStopRequest: () => stopFromPhone(), ...(deps.phones ? { options: deps.phones } : {}) })
 
   const emit = (e: NewEvent & { deviceId: string }): void => {
     const { deviceId, ...event } = e
@@ -69,6 +89,7 @@ export async function createHub(db: Store, deps: Deps): Promise<Hub> {
 
   const registry = new Registry({ devices, emit, log: deps.log })
   registry.add(pcConnector(deps.exec ? { exec: deps.exec } : {}))
+  registry.add(androidConnector({ phones, link, tokens }))
   const miniAsConnector = deps.mini as MiniLink & Partial<Connector>
   if (miniAsConnector.manifest) registry.add(miniAsConnector as Connector)
 
@@ -84,6 +105,7 @@ export async function createHub(db: Store, deps: Deps): Promise<Hub> {
   expiry.unref()
 
   await registry.startAll()
+  if (tokens.paired().length > 0) await link.open().catch(error => deps.log.error({ err: String(error) }, 'could not open the device link'))
 
   const hub: Hub = {
     db,
@@ -96,21 +118,41 @@ export async function createHub(db: Store, deps: Deps): Promise<Hub> {
     devices,
     registry,
     mini: deps.mini,
+    link,
+    tokens,
+    pairing,
+    phones,
     log: deps.log,
     live,
     version: VERSION,
     ...(deps.dataDir ? { dataDir: deps.dataDir } : {}),
+    removeDevice(id, deleteEvents) {
+      tokens.revoke(id)
+      link.drop(id)
+      phones.forget(id)
+      devices.remove(id)
+      if (deleteEvents) {
+        db.prepare('DELETE FROM events WHERE device_id = ?').run(id)
+        live.emit('topic', 'events')
+      }
+      pairing.closeIfUnused()
+    },
     async stopMini(by) {
       stop.stop()
+      phones.stopAll()
       approvals.noAll()
       audit.append({ caller: by, action: 'stop', outcome: 'done' })
       await deps.mini.stopControl().catch(error => deps.log.warn({ err: String(error) }, 'could not reach the bot to stop control'))
     },
     async close() {
       clearInterval(expiry)
+      pairing.dispose()
+      phones.dispose()
+      await link.close()
       await registry.stopAll()
       db.close()
     },
   }
+  stopFromPhone = () => hub.stopMini('device')
   return hub
 }

@@ -7,7 +7,13 @@ import { ApiFailure } from '../../rules/policy.ts'
 /** Every switch the owner could set today: each device's own scopes, and one row per shared connector scope. */
 const allRows = (hub: Hub) => {
   const devices = hub.devices.list().filter(d => d.id !== 'hub')
-  const rows: Array<{ target: string; targetName: string; scope: ScopeId; label: string; kind: string; collectable: boolean; collect: boolean; mini: string; voiceSafe: boolean }> = []
+  type Row = { target: string; targetName: string; scope: ScopeId; label: string; kind: string; collectable: boolean; collect: boolean; mini: string; voiceSafe: boolean; phone?: { mini: string; pc: string } }
+  const rows: Row[] = []
+  // A phone's own two lists, as it last reported them (docs/04 > Whose switches win). Shown, never set from here.
+  const phoneLists = (id: string, scope: ScopeId): Pick<Row, 'phone'> => {
+    const lists = hub.devices.get(id)?.state.lists as { mini?: Record<string, string>; pc?: Record<string, string> } | undefined
+    return lists ? { phone: { mini: lists.mini?.[scope] ?? 'off', pc: lists.pc?.[scope] ?? 'off' } } : {}
+  }
   const connectors = new Set(devices.map(d => d.connectorId))
   for (const [scope, def] of Object.entries(SCOPES) as Array<[ScopeId, (typeof SCOPES)[ScopeId]]>) {
     const targets = def.perDevice
@@ -15,7 +21,8 @@ const allRows = (hub: Hub) => {
       : connectors.has(def.connector)
         ? [{ id: def.connector, name: def.connector }]
         : []
-    for (const t of targets) rows.push({ target: t.id, targetName: t.name, scope, label: def.label, kind: def.kind, collectable: def.collectable, ...hub.grants.get(t.id, scope) })
+    for (const t of targets)
+      rows.push({ target: t.id, targetName: t.name, scope, label: def.label, kind: def.kind, collectable: def.collectable, ...hub.grants.get(t.id, scope), ...(def.connector === 'android' ? phoneLists(t.id, scope) : {}) })
   }
   return rows
 }

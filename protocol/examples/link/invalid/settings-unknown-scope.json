@@ -1,0 +1,7 @@
+{
+  "t": "settings",
+  "rev": 1,
+  "collect": {
+    "phone.mind.read": true
+  }
+}

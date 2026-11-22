@@ -38,6 +38,6 @@ describe('events', () => {
   })
 
   test('error codes are the agreed set', () => {
-    expect([...ERROR_CODES].sort()).toEqual(['bad-request', 'decided', 'expired', 'forbidden', 'not-allowed', 'not-found', 'stopped', 'too-large', 'unauthorized', 'unavailable'])
+    expect([...ERROR_CODES].sort()).toEqual(['bad-request', 'conflict', 'decided', 'expired', 'forbidden', 'no-network', 'not-allowed', 'not-found', 'offline', 'stopped', 'timeout', 'too-large', 'unauthorized', 'unavailable'])
   })
 })

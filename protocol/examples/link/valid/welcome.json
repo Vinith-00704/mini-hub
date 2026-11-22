@@ -1,0 +1,11 @@
+{
+  "t": "welcome",
+  "v": 1,
+  "ackSeq": 40,
+  "time": 1795300000000,
+  "collect": {
+    "phone.usage.read": true,
+    "phone.calls.read": false
+  },
+  "settingsRev": 3
+}

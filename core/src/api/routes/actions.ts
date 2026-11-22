@@ -64,14 +64,26 @@ export function actionRoutes(app: FastifyInstance, hub: Hub): void {
     }
 
     const ticket = hub.tickets.create()
-    const run = async (): Promise<void> => {
+    const run = async (approvalId?: string): Promise<void> => {
       try {
-        const data = await def.run(args, device)
+        const data = await def.run(args, device, {
+          origin: caller.kind === 'person' ? 'person' : 'agent',
+          approved: caller.kind === 'person' || approvalId !== undefined,
+          ...(approvalId ? { approvalId } : {}),
+          onWaiting: () => hub.tickets.waitingFor(ticket, 'phone'),
+        })
         hub.tickets.settle(ticket, { done: true, ok: true, data })
         audit('done')
       } catch (error) {
-        hub.tickets.settle(ticket, { done: true, ok: false, error: error instanceof Error ? error.message : 'That did not work.', code: 'unavailable' })
-        audit('failed')
+        const known = error instanceof ApiFailure
+        hub.tickets.settle(ticket, {
+          done: true,
+          ok: false,
+          error: error instanceof Error ? error.message : 'That did not work.',
+          code: known ? error.code : 'unavailable',
+          ...(known && error.scope ? { scope: error.scope } : {}),
+        })
+        audit(known && error.code === 'not-allowed' ? 'refused' : 'failed')
       }
     }
 
@@ -92,7 +104,7 @@ export function actionRoutes(app: FastifyInstance, hub: Hub): void {
     audit('waiting')
     void hub.approvals.settled(approval.id).then(a => {
       // The answer is checked again here: a Stop between the question and the yes still wins.
-      if (a.state === 'yes' && !hub.stop.stopped) return run()
+      if (a.state === 'yes' && !hub.stop.stopped) return run(approval.id)
       hub.tickets.settle(ticket, { done: true, ok: false, code: 'not-allowed', error: a.state === 'expired' ? 'The owner did not answer in time.' : 'The owner said no.' })
       audit('refused')
     })

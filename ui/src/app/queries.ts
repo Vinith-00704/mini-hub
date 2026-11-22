@@ -3,7 +3,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from './api.ts'
 
-export type Device = { id: string; connectorId: string; kind: string; name: string; state: Record<string, unknown>; lastSeenAt?: number }
+export type Device = { id: string; connectorId: string; kind: string; name: string; info?: Record<string, unknown>; state: Record<string, unknown>; lastSeenAt?: number }
+export type PairingView = { state: 'none' | 'waiting' | 'check' | 'done' | 'expired' | 'cancelled'; expiresAt?: number; words?: string[]; deviceName?: string; deviceId?: string }
+export type PairingStart = { qr: string; address: string; code: string; expiresAt: number }
 export type MiniProfile = { name: string; avatar: string; accent: string; sprite?: unknown }
 export type HubState = {
   version: string
@@ -24,7 +26,7 @@ export type MiniState = {
 }
 export type Turn = { id: string; text: string; reply?: string; partial: boolean; isError: boolean; at: number }
 export type Approval = { id: string; summary: string; state: string; expiresAt: number; risk: string; scope: string; requestedAt?: number }
-export type GrantRow = { target: string; targetName: string; scope: string; label: string; kind: string; collectable: boolean; collect: boolean; mini: 'off' | 'ask' | 'on'; voiceSafe: boolean }
+export type GrantRow = { target: string; targetName: string; scope: string; label: string; kind: string; collectable: boolean; collect: boolean; mini: 'off' | 'ask' | 'on'; voiceSafe: boolean; phone?: { mini: string; pc: string } }
 export type AuditRow = { id: number; at: number; caller: string; detail?: string; action: string; target?: string; scope?: string; risk?: string; outcome: string; data: Record<string, unknown> }
 export type EventRow = {
   id: number
@@ -50,6 +52,8 @@ export const useConversation = () =>
   })
 export const useApprovals = () => useQuery({ queryKey: ['approvals'], queryFn: () => api<{ approvals: Approval[] }>('/v1/approvals'), refetchInterval: 10_000 })
 export const useGrants = () => useQuery({ queryKey: ['grants'], queryFn: () => api<{ items: GrantRow[] }>('/v1/grants') })
+export const useDevices = () => useQuery({ queryKey: ['devices'], queryFn: () => api<{ items: Device[] }>('/v1/devices') })
+export const useDevice = (id: string) => useQuery({ queryKey: ['devices', id], queryFn: () => api<Device>(`/v1/devices/${encodeURIComponent(id)}`) })
 export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: () => api<UiSettings>('/v1/settings') })
 export const useAudit = (params: Record<string, string> = {}) =>
   useQuery({ queryKey: ['audit', params], queryFn: () => api<{ items: AuditRow[] }>(`/v1/audit?${new URLSearchParams({ limit: '200', ...params })}`) })

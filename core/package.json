@@ -3,14 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "start": "node src/main.ts" },
+  "scripts": {
+    "start": "node src/main.ts"
+  },
   "dependencies": {
-    "@minihub/protocol": "*",
     "@fastify/websocket": "^11.0.0",
+    "@minihub/protocol": "*",
     "better-sqlite3-multiple-ciphers": "13.2.0",
+    "bonjour-service": "^1.4.4",
     "fastify": "^5.0.0",
     "pino": "^9.0.0",
+    "ws": "^8.22.2",
     "zod": "^4.6.7"
   },
-  "devDependencies": { "@types/better-sqlite3": "^7.6.0", "@types/ws": "^8.5.0", "ws": "^8.18.0" }
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/ws": "^8.5.0",
+    "esbuild": "^0.28.2"
+  }
 }

@@ -33,7 +33,7 @@ const grants = new Grants(db)
 const events = new Events(db, grants, devices)
 
 devices.upsert({ id: 'pc', connectorId: 'pc', kind: 'pc', name: 'This PC', state: { online: true } })
-devices.upsert({ id: 'phone-test', connectorId: 'android', kind: 'phone', name: 'Test phone', state: { online: true, battery: 62, charging: true }, info: { model: 'Test model' } })
+devices.upsert({ id: 'phone-test', connectorId: 'android', kind: 'phone', name: 'Test phone', state: { online: true, battery: 62, charging: true, network: 'wifi', brain: 'ok', appVersion: '0.2.0', lists: { mini: { 'phone.usage.read': 'ask' }, pc: { 'phone.usage.read': 'on', 'phone.calls.read': 'ask' } } }, info: { model: 'Test model', appVersion: '0.2.0' } })
 devices.upsert({ id: 'mail-test', connectorId: 'mail', kind: 'mail-account', name: 'Mail (test)', info: { address: 'me@example.com' } })
 
 // Collect is on for the made-up sources so the screens have something to show; Mini is given nothing.

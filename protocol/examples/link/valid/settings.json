@@ -1,0 +1,7 @@
+{
+  "t": "settings",
+  "rev": 4,
+  "collect": {
+    "phone.usage.read": false
+  }
+}

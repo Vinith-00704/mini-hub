@@ -9,6 +9,7 @@ import { Switch } from '../../components/ui/Switch.tsx'
 import { Tile } from '../../components/ui/Tile.tsx'
 import { accentFor } from '../../design/color.ts'
 import { applyLook } from '../frame/look.ts'
+import { StartUp } from './StartUp.tsx'
 
 const ACCENTS = ['bot', 'claude', 'blue', 'green', 'pink', 'orange', 'purple'] as const
 
@@ -85,6 +86,7 @@ export function Settings() {
           <Switch checked={s.privacy} onChange={privacy => save.mutate({ privacy })} label="Privacy mode" />
         </Field>
       </Tile>
+      <StartUp />
       <Tile title="About">
         <Field label="Version">
           <span className="tabular text-small text-ink-2">{s.version ?? ''}</span>

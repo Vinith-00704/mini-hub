@@ -24,6 +24,23 @@ code. Each has a pass mark and what happens if it fails. Run T1 first: it decide
 | **T5. Glyph** | Does the Glyph kit drive the Phone (2a)'s lights from a hand-installed app? | One pattern plays on request | The Glyph feature is dropped from Phase 5 |
 | **T6. Staying alive** | With a foreground service and battery use unrestricted, do the test app and Termux both survive a night? | Both still running after 8 hours of normal use, including the phone's own memory clean-up | Add a watchdog (WorkManager restart); if Termux still dies, the brain is started on demand instead of kept running |
 
+**Results so far**
+
+- **T1, 2026-11-22, owner's Nothing Phone (2a), Claude Code 2.1.330 in Termux, Mini Bot 0.7.2 copied to `~/.mini`
+  (not installed into the phone's Claude Code):**
+  - The plugin loads: `/mini-bot` answered inside the phone's session.
+  - A prompt put in the runtime's queue over HTTP came back in 3.2 s; later ones in 2 to 5 s.
+  - Permission mode `dontAsk`: a request to run a command was refused with no question, and the session carried on.
+  - Memory: Claude Code about 390 MB, the runtime about 37 MB.
+  - Found: Claude Code must be started with Termux's exec helper removed (`unset LD_PRELOAD`), or it fails with
+    "unexpected e_type: 2". tmux and `script` add the helper back, so the start script unsets it itself.
+  - Found: the first start in a new folder stops at Claude Code's folder-trust question. The owner answers it once,
+    by hand; the phone app's setup must show this step.
+  - Found: Claude Code warns that cross-session messaging is off (its socket folder cannot be under `/data/data`).
+    Harmless; giving it `CLAUDE_CODE_TMPDIR` inside Termux's home should quiet it.
+  - The two-hour run with the screen off is below once done. The processes in this trial were started over USB
+    (`run-as`), not by the Termux app, so Android may treat the real setup differently; T6 checks that.
+
 Trials T1 and T6 touch the owner's daily phone. Agree a time with them, and read "Testing safely" below first.
 
 **Needs installing first**: the Rust toolchain and the Visual Studio C++ build tools on the PC (for T2); `nodejs`,

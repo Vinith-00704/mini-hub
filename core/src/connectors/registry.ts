@@ -62,6 +62,12 @@ export class DeviceStore implements DeviceAccess {
     this.#changed()
   }
 
+  /** Takes a device out of every list. Its row stays, marked removed, so old audit rows still name it. */
+  remove(id: string): void {
+    this.#db.prepare('UPDATE devices SET removed_at = ?, token_hash = NULL WHERE id = ?').run(this.#now(), id)
+    this.#changed()
+  }
+
   rename(id: string, patch: { name?: string; room?: string | null }): Device {
     const d = this.get(id)
     if (!d) throw new ApiFailure(404, 'not-found', 'There is no such device.')

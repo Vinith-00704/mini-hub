@@ -62,6 +62,15 @@ scripts, images or analytics, ever.
 The shell stays small: start the core, hand it the keys, show the window, own the tray and the global key. No
 business logic.
 
+As built (2026-11-22):
+- Closing the window destroys it, which frees the web view (about 370 MB); the tray, `Ctrl+Alt+H` and a second
+  launch build it again. Started with Windows (`--hidden`), only the tray and the core run (under 100 MB).
+- The shell works out the data folder once and always passes it to the core as `MINI_HUB_HOME`.
+- For trying a build without touching the owner's data: `MINI_HUB_HOME` (a full path) and `MINI_HUB_KEY_ACCOUNT`
+  (the Credential Manager account, default `database`). Development (`npm run tauri dev`) uses
+  `.minihub-home/shell-dev`, the account `database-dev`, and leaves the real Mini Bot alone unless `MINI_HUB_DEV_BOT=1`.
+- The core is started without `NODE_OPTIONS`, since it holds both keys.
+
 Needs installing on the build PC: the Rust toolchain (`rustup`, the MSVC target) and the Visual Studio C++ build
 tools. WebView2 is present.
 

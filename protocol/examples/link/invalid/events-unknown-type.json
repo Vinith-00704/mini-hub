@@ -1,0 +1,11 @@
+{
+  "t": "events",
+  "from": 1,
+  "items": [
+    {
+      "seq": 1,
+      "type": "telepathy",
+      "occurredAt": 1795300000000
+    }
+  ]
+}

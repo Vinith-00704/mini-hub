@@ -12,6 +12,7 @@ import { liveRoutes } from './live.ts'
 import { actionRoutes } from './routes/actions.ts'
 import { basicRoutes } from './routes/basics.ts'
 import { deviceRoutes } from './routes/devices.ts'
+import { pairingRoutes } from './routes/pairing.ts'
 import { eventRoutes } from './routes/events.ts'
 import { miniRoutes } from './routes/mini.ts'
 import { ruleRoutes } from './routes/rules.ts'
@@ -132,6 +133,7 @@ export async function buildServer(hub: Hub, keys: Keys, opts: { uiOrigin?: strin
     basicRoutes(scope, hub)
     eventRoutes(scope, hub)
     deviceRoutes(scope, hub)
+    pairingRoutes(scope, hub)
     actionRoutes(scope, hub)
     ruleRoutes(scope, hub)
     miniRoutes(scope, hub)

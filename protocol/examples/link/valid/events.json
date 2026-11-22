@@ -1,0 +1,26 @@
+{
+  "t": "events",
+  "from": 41,
+  "items": [
+    {
+      "seq": 41,
+      "type": "device_state",
+      "occurredAt": 1795300000000,
+      "data": {
+        "battery": 80,
+        "charging": false,
+        "network": "wifi"
+      }
+    },
+    {
+      "seq": 42,
+      "type": "sms",
+      "occurredAt": 1795300001000,
+      "who": "Asha Example",
+      "whoKey": "+15550123",
+      "app": "sms",
+      "title": "Asha Example",
+      "body": "See you at 8"
+    }
+  ]
+}

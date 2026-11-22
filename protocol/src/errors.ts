@@ -11,6 +11,11 @@ export const ERROR_CODES = [
   'expired',
   'decided',
   'unavailable',
+  // The device link (docs/04): no pairing is waiting, the PC has no home network, the phone is not linked, no answer in time.
+  'conflict',
+  'no-network',
+  'offline',
+  'timeout',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]

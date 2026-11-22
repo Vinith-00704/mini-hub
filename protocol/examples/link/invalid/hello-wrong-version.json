@@ -1,0 +1,9 @@
+{
+  "t": "hello",
+  "v": 2,
+  "deviceId": "phone-1a2b",
+  "token": "dGVzdC10b2tlbi1ub3QtcmVhbA",
+  "appVersion": "0.2.0",
+  "lastSeq": 42,
+  "time": 1795300000000
+}

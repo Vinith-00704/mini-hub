@@ -1,0 +1,21 @@
+{
+  "t": "state",
+  "battery": 75,
+  "charging": true,
+  "network": "wifi",
+  "brain": "asleep",
+  "controlling": false,
+  "stopped": false,
+  "lists": {
+    "mini": {
+      "phone.usage.read": "off"
+    },
+    "pc": {
+      "phone.usage.read": "ask"
+    }
+  },
+  "collect": {
+    "phone.usage.read": true,
+    "phone.calls.read": false
+  }
+}

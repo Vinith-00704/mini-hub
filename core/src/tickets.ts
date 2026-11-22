@@ -4,14 +4,16 @@ import { randomUUID } from 'node:crypto'
 import type { ErrorCode } from '@minihub/protocol'
 import { ApiFailure } from './rules/policy.ts'
 
-export type TicketResult = { done: true; ok: boolean; data?: unknown; error?: string; code?: ErrorCode }
-export type TicketWaiting = { done: false; waitingFor?: 'approval' }
+export type TicketResult = { done: true; ok: boolean; data?: unknown; error?: string; code?: ErrorCode; scope?: string }
+/** What a running ticket waits for: the owner on the dashboard, or the owner on the phone. */
+export type WaitingFor = 'approval' | 'phone'
+export type TicketWaiting = { done: false; waitingFor?: WaitingFor }
 
 export const MAX_WAIT_MS = 2000
 // Finished tickets are kept this long for a late poll, then forgotten.
 const KEEP_MS = 10 * 60 * 1000
 
-type Entry = { result?: TicketResult; waitingFor?: 'approval'; waiters: Set<(r: TicketResult) => void>; at: number }
+type Entry = { result?: TicketResult; waitingFor?: WaitingFor; waiters: Set<(r: TicketResult) => void>; at: number }
 
 export class Tickets {
   #all = new Map<string, Entry>()
@@ -23,7 +25,7 @@ export class Tickets {
     return id
   }
 
-  waitingFor(id: string, what: 'approval' | undefined): void {
+  waitingFor(id: string, what: WaitingFor | undefined): void {
     const e = this.#all.get(id)
     if (e) e.waitingFor = what
   }

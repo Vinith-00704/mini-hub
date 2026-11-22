@@ -29,7 +29,7 @@ export const meaning = (row: GrantRow, value: Mini): string => {
 
 const PC_NAMES: Record<string, string> = { screen: 'Screen', microphone: 'Microphone', computer: 'Computer control', files: 'Files' }
 
-function Row({ row, onNote }: { row: GrantRow; onNote: (text: string) => void }) {
+export function GrantRowItem({ row, onNote }: { row: GrantRow; onNote: (text: string) => void }) {
   const client = useQueryClient()
   const change = useMutation({
     mutationFn: (p: { collect?: boolean; mini?: Mini }) => put(`/v1/grants/${encodeURIComponent(row.target)}/${encodeURIComponent(row.scope)}`, p),
@@ -83,7 +83,7 @@ export function Permissions() {
         >
           <ul>
             {list.map(r => (
-              <Row key={`${r.target}/${r.scope}`} row={r} onNote={setNote} />
+              <GrantRowItem key={`${r.target}/${r.scope}`} row={r} onNote={setNote} />
             ))}
           </ul>
         </Tile>

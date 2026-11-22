@@ -1,0 +1,10 @@
+{
+  "t": "result",
+  "id": "c-1",
+  "ok": true,
+  "data": {
+    "battery": 80,
+    "charging": false,
+    "network": "wifi"
+  }
+}
