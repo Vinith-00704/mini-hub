@@ -1,0 +1,24 @@
+{
+  "name": "mini-hub",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "protocol",
+    "core",
+    "ui"
+  ],
+  "scripts": {
+    "dev": "node tools/dev.mjs",
+    "test": "vitest run",
+    "check": "tsc -p protocol && tsc -p core && tsc -p ui"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.3",
+    "vitest": "^5.1.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "better-sqlite3-multiple-ciphers": false
+  }
+}

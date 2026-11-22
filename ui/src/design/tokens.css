@@ -1,0 +1,151 @@
+/* The dashboard's tokens (docs/07-dashboard-design.md > Tokens). Components use these, never raw values. */
+
+@import 'tailwindcss';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+:root,
+[data-theme='dark'] {
+  --bg: #0e0f11;
+  --surface: #16181b;
+  --surface-2: #1d2024;
+  --border: #2a2e33;
+  --border-strong: #3a3f46;
+  --text: #eceef0;
+  --text-2: #a3aab2;
+  --text-3: #737a82;
+  --ok: #3fb37f;
+  --warn: #e0a23a;
+  --danger: #e5534b;
+  --info: #5b9dd9;
+  --shadow-tile: none;
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --bg: #f5f5f2;
+  --surface: #ffffff;
+  --surface-2: #f0f0ec;
+  --border: #e1e1dc;
+  --border-strong: #c9c9c3;
+  --text: #1a1c1e;
+  --text-2: #565d65;
+  --text-3: #868d94;
+  --ok: #1f8a5b;
+  --warn: #a86a00;
+  --danger: #c5322b;
+  --info: #2f6fb0;
+  --shadow-tile: 0 1px 2px rgb(0 0 0 / 0.06);
+  color-scheme: light;
+}
+
+:root {
+  /* Set from the bot's accent at run time (Frame). --accent-ink is the same hue made readable on the surface. */
+  --accent: #d77757;
+  --accent-text: #000000;
+  --accent-ink: #d77757;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --pad-tile: 16px;
+  --row: 40px;
+}
+
+[data-density='compact'] {
+  --pad-tile: 12px;
+  --row: 32px;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-ink: var(--text);
+  --color-ink-2: var(--text-2);
+  --color-ink-3: var(--text-3);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-accent-ink: var(--accent-ink);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --text-display: 28px;
+  --text-display--line-height: 34px;
+  --text-title: 20px;
+  --text-title--line-height: 26px;
+  --text-head: 16px;
+  --text-head--line-height: 22px;
+  --text-body: 14px;
+  --text-body--line-height: 20px;
+  --text-small: 13px;
+  --text-small--line-height: 18px;
+  --text-micro: 12px;
+  --text-micro--line-height: 16px;
+  --radius-tile: 12px;
+  --radius-control: 8px;
+  --radius-chip: 6px;
+  --radius-panel: 16px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+
+.privacy-blur {
+  filter: blur(5px);
+  transition: filter 120ms var(--ease);
+}
+.privacy-blur:hover,
+.privacy-blur:focus-within {
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 180ms var(--ease) both;
+}

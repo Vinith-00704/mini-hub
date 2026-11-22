@@ -1,0 +1,124 @@
+# Mini Hub: what must never be committed, and what is only build output.
+# Rule of thumb: anything that identifies the owner, their devices or their accounts, anything that
+# unlocks something, and anything collected from a device stays out of git. See docs/03-security-and-permissions.md.
+
+# ---- Secrets and credentials ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+secrets.json
+secrets.*.json
+*.secret
+*token*.json
+*cookie*.json
+credentials.json
+client_secret*.json
+google-services.json
+service-account*.json
+
+# ---- The owner's own setup: device names, addresses, pairing data, notes ----
+/local/
+hub.json
+pairing*.json
+devices.local.json
+*.local.json
+*.local.toml
+*.local.md
+
+# ---- Data collected from devices, and everything the hub stores ----
+/data/
+**/hub-data/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlcipher
+/backups/
+*.backup
+*.bak
+/exports/
+*.mbox
+*.eml
+/captures/
+/screenshots/
+/recordings/
+*.wav
+*.m4a
+*.opus
+
+# ---- Logs (they can hold names, numbers and message text) ----
+*.log
+logs/
+bugreport*.zip
+bstats*.txt
+logcat*.txt
+
+# ---- Node / web ----
+node_modules/
+dist/
+dist-ssr/
+build/
+.vite/
+.turbo/
+coverage/
+*.tsbuildinfo
+.eslintcache
+playwright-report/
+test-results/
+
+# ---- Tauri / Rust ----
+/shell/target/
+**/src-tauri/target/
+**/src-tauri/gen/
+/shell/binaries/
+
+# ---- Android ----
+/android/.gradle/
+/android/build/
+/android/**/build/
+/android/local.properties
+/android/captures/
+/android/.cxx/
+/android/.kotlin/
+*.apk
+*.aab
+*.ap_
+*.dex
+output-metadata.json
+
+# ---- Test homes and scratch ----
+.minihub-home/
+.test-home/
+/tmp/
+/scratch/
+
+# ---- Claude Code and other assistants: local settings only ----
+.claude/settings.local.json
+.claude/*.local.*
+.claude-plugin/types/
+
+# ---- Editors and operating systems ----
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Plan workspaces of the build process (ledgers, briefs)
+/.superpowers/
