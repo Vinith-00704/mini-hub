@@ -1,7 +1,8 @@
-// The dashboard's own choices: how it looks. Kept in the encrypted database with everything else.
+// The dashboard's own choices: how it looks, and how long things are kept (Settings > Data). Kept in the encrypted database with everything else.
 
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
+import { retentionPatchSchema } from '../../data/retention.ts'
 import type { Hub } from '../../hub.ts'
 import { getSetting, setSetting } from '../../store/db.ts'
 
@@ -20,12 +21,18 @@ export const DEFAULT_UI: UiSettings = { theme: 'dark', accent: 'bot', density: '
 export function settingsRoutes(app: FastifyInstance, hub: Hub): void {
   const current = (): UiSettings => ({ ...DEFAULT_UI, ...getSetting<Partial<UiSettings>>(hub.db, 'ui', {}) })
 
-  app.get('/v1/settings', { config: { access: 'person' } }, async () => ({ ...current(), dataDir: hub.dataDir ?? null, version: hub.version }))
+  app.get('/v1/settings', { config: { access: 'person' } }, async () => ({
+    ...current(),
+    retention: hub.retention.current(),
+    dataDir: hub.dataDir ?? null,
+    version: hub.version,
+  }))
 
   app.patch('/v1/settings', { config: { access: 'person', audit: 'settings' } }, async req => {
-    const patch = uiSettingsSchema.partial().strict().parse(req.body)
-    const next = { ...current(), ...patch }
+    const { retention, ...look } = uiSettingsSchema.partial().extend({ retention: retentionPatchSchema.optional() }).strict().parse(req.body)
+    const next = { ...current(), ...look }
     setSetting(hub.db, 'ui', next)
-    return next
+    // A shorter time removes the older items at the next run, not at once.
+    return { ...next, retention: retention ? hub.retention.update(retention) : hub.retention.current() }
   })
 }

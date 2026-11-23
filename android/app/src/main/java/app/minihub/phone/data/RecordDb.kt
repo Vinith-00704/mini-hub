@@ -18,7 +18,7 @@ class RecordDb(context: Context) : RecordStore, AuditStore {
     init {
         System.loadLibrary("sqlcipher")
         val key = Sealed.databaseKey(context.noBackupFilesDir)
-        helper = object : SQLiteOpenHelper(context, "record.db", key, null, 1, 0, null, null, true) {
+        helper = object : SQLiteOpenHelper(context, "record.db", key, null, 2, 0, null, null, true) {
             override fun onCreate(db: SQLiteDatabase) {
                 db.execSQL(
                     """CREATE TABLE events (
@@ -30,16 +30,51 @@ class RecordDb(context: Context) : RecordStore, AuditStore {
                 )
                 db.execSQL("CREATE INDEX events_time ON events (occurred_at)")
                 db.execSQL("CREATE TABLE audit (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, who TEXT NOT NULL, action TEXT NOT NULL, scope TEXT, outcome TEXT NOT NULL, detail TEXT)")
+                createSeen(db)
             }
 
-            override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+            override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+                if (oldVersion < 2) createSeen(db)
+            }
+
+            /** Fingerprints of what was recorded in the last 7 days, so a repeat is folded (docs/04). */
+            private fun createSeen(db: SQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS seen (fp TEXT PRIMARY KEY, at INTEGER NOT NULL)")
+            }
         }
     }
 
     private val db get() = helper.writableDatabase
 
-    override fun insert(e: NewEvent): Long {
-        val v = ContentValues().apply {
+    override fun insert(e: NewEvent): Long = db.insertOrThrow("events", null, values(e))
+
+    override fun insertOnce(fp: String, at: Long, e: NewEvent): Long? {
+        db.beginTransaction()
+        try {
+            val known = db.insertWithOnConflict("seen", null, ContentValues().apply { put("fp", fp); put("at", at) }, SQLiteDatabase.CONFLICT_IGNORE) == -1L
+            if (known) return null
+            val seq = db.insertOrThrow("events", null, values(e))
+            db.setTransactionSuccessful()
+            return seq
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override fun prune(ackedUpTo: Long, before: Long): Int {
+        db.beginTransaction()
+        try {
+            val gone = db.delete("events", "seq <= ? AND occurred_at < ?", arrayOf(ackedUpTo.toString(), before.toString()))
+            db.delete("seen", "at < ?", arrayOf(before.toString()))
+            db.setTransactionSuccessful()
+            return gone
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun values(e: NewEvent): ContentValues {
+        return ContentValues().apply {
             put("type", e.type)
             put("occurred_at", e.occurredAt)
             put("who", e.who)
@@ -49,7 +84,6 @@ class RecordDb(context: Context) : RecordStore, AuditStore {
             put("body", e.body)
             put("data", e.data)
         }
-        return db.insertOrThrow("events", null, v)
     }
 
     private fun rows(sql: String, args: Array<Any?>): List<StoredEvent> {
@@ -66,18 +100,42 @@ class RecordDb(context: Context) : RecordStore, AuditStore {
 
     private val cols = "seq, type, occurred_at, who, who_key, app, title, body, data"
 
-    override fun after(seq: Long, limit: Int) = rows("SELECT $cols FROM events WHERE seq > ? ORDER BY seq LIMIT ?", arrayOf(seq, limit))
+    override fun after(seq: Long, limit: Int, types: Set<String>): List<StoredEvent> {
+        if (types.isEmpty()) return emptyList()
+        val marks = types.joinToString(",") { "?" }
+        return rows("SELECT $cols FROM events WHERE seq > ? AND type IN ($marks) ORDER BY seq LIMIT ?", arrayOf<Any?>(seq, *types.toTypedArray(), limit))
+    }
 
     override fun latestSeq(): Long =
         db.rawQuery("SELECT seq FROM sqlite_sequence WHERE name = 'events'").use { c -> if (c.moveToFirst()) c.getLong(0) else 0L }
 
     override fun search(q: String, limit: Int): List<StoredEvent> {
         if (q.isBlank()) return rows("SELECT $cols FROM events ORDER BY seq DESC LIMIT ?", arrayOf(limit))
-        val like = "%" + q.trim().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        val like = like(q)
         return rows(
             "SELECT $cols FROM events WHERE who LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\' OR app LIKE ? ESCAPE '\\' ORDER BY seq DESC LIMIT ?",
             arrayOf(like, like, like, like, limit),
         )
+    }
+
+    /** A LIKE pattern that matches `q` anywhere, with its own %, _ and \ taken literally. */
+    private fun like(q: String) = "%" + q.trim().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+    override fun query(types: Set<String>, from: Long, to: Long, who: String?, text: String?, limit: Int): List<StoredEvent> {
+        if (types.isEmpty()) return emptyList()
+        val sql = StringBuilder("SELECT $cols FROM events WHERE type IN (${types.joinToString(",") { "?" }}) AND occurred_at BETWEEN ? AND ?")
+        val args = ArrayList<Any?>().apply { addAll(types); add(from); add(to) }
+        if (!who.isNullOrBlank()) {
+            sql.append(" AND who LIKE ? ESCAPE '\\'")
+            args.add(like(who))
+        }
+        if (!text.isNullOrBlank()) {
+            sql.append(" AND (title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')")
+            like(text).let { args.add(it); args.add(it) }
+        }
+        sql.append(" ORDER BY occurred_at DESC, seq DESC LIMIT ?")
+        args.add(limit)
+        return rows(sql.toString(), args.toTypedArray())
     }
 
     override fun delete(seqs: List<Long>): Int {

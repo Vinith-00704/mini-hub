@@ -98,6 +98,7 @@ export function eventRoutes(app: FastifyInstance, hub: Hub): void {
         logRead('waiting', scopes)
         void hub.approvals.settled(approval.id).then(a => {
           if (a.state === 'yes' && !hub.stop.stopped) {
+            hub.tickets.waitingFor(ticket, undefined)
             const result = hub.events.query(q, viewer, asking)
             hub.audit.append({ caller, action: 'read', target: 'events', outcome: 'done', data: { count: result.items.length, ids: result.items.slice(0, 200).map(e => e.id), scopes } })
             hub.tickets.settle(ticket, { done: true, ok: true, data: result })
@@ -131,8 +132,17 @@ export function eventRoutes(app: FastifyInstance, hub: Hub): void {
     return { ok: true }
   })
 
-  app.delete('/v1/events', { config: { access: 'person', audit: 'delete' } }, async req => {
-    const { ids } = z.object({ ids: z.array(z.number().int()).max(1000) }).parse(req.body)
-    return { removed: hub.events.remove(ids) }
+  // `{ ids }` deletes those events; `{ types }` deletes every event of those kinds, with its own audit row naming them.
+  app.delete('/v1/events', { config: { access: 'person', audit: 'delete', selfAudit: true } }, async req => {
+    const body = z
+      .union([z.object({ ids: z.array(z.number().int()).max(1000) }), z.object({ types: z.array(z.enum(EVENT_TYPES)).min(1).max(EVENT_TYPES.length) })])
+      .parse(req.body)
+    if ('ids' in body) return { removed: hub.events.remove(body.ids) }
+    const types = [...new Set(body.types)]
+    const removed = hub.events.removeTypes(types)
+    req.audited = true
+    hub.audit.append({ caller: 'person', action: 'delete', target: 'events', outcome: 'done', data: { types, count: removed } })
+    hub.live.emit('topic', 'events')
+    return { removed }
   })
 }

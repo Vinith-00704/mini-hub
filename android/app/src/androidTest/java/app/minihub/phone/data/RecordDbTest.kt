@@ -31,8 +31,8 @@ class RecordDbTest {
         val seqs = (1L..5L).map { db.insert(sms(it)) }
         assertEquals(listOf(1L, 2L, 3L, 4L, 5L), seqs)
         assertEquals(5L, db.latestSeq())
-        assertEquals(listOf(3L, 4L), db.after(2, 2).map { it.seq })
-        assertEquals("Message 3", db.after(2, 1).single().event.body)
+        assertEquals(listOf(3L, 4L), db.after(2, 2, setOf("sms")).map { it.seq })
+        assertEquals("Message 3", db.after(2, 1, setOf("sms")).single().event.body)
     }
 
     @Test

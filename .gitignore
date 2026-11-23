@@ -47,6 +47,9 @@ devices.local.json
 *.sqlcipher
 /backups/
 *.backup
+# Mini Hub backups (Settings > Data) hold the owner's events, and the file being written beside one
+*.minihub
+*.minihub.*.tmp
 *.bak
 /exports/
 *.mbox
@@ -125,3 +128,6 @@ desktop.ini
 
 # Built app pieces (bundled core, node.exe) made by tools/bundle-core.mjs
 /.build/
+
+# The look's token source is not a secret (it matches *token*.json above).
+!design/tokens.json

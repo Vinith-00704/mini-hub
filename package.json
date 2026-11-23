@@ -13,7 +13,9 @@
     "test": "vitest run",
     "check": "tsc -p protocol && tsc -p core && tsc -p ui",
     "build:shell": "npm run build -w @minihub/ui && node tools/bundle-core.mjs .build/core && npm run tauri -w @minihub/shell -- build",
-    "tauri": "npm run tauri -w @minihub/shell --"
+    "tauri": "npm run tauri -w @minihub/shell --",
+    "tokens": "node tools/tokens.mjs",
+    "tokens:check": "node tools/tokens.mjs --check"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

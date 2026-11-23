@@ -1,6 +1,6 @@
 // Everything that happened, from every source, and who may see which of it (docs/04-data-and-sync.md > Event types).
 
-import { EVENT_TYPES, eventScope, newEventSchema, SCOPES, type EventType, type NewEvent, type ScopeId } from '@minihub/protocol'
+import { EVENT_TYPES, eventScope, maskCodes, newEventSchema, SCOPES, type EventType, type NewEvent, type ScopeId } from '@minihub/protocol'
 import type { DeviceStore } from './connectors/registry.ts'
 import { ApiFailure } from './rules/policy.ts'
 import type { Grants } from './rules/grants.ts'
@@ -55,6 +55,8 @@ type Raw = {
 }
 
 const HUB_DEVICE = 'hub'
+/** Rows deleted per transaction when many go at once. */
+const REMOVE_CHUNK = 5000
 // Calls, messages, mail and notifications: what a voice turn may hear only with its own switch on.
 const PRIVATE_TYPES = new Set<EventType>(['call', 'sms', 'chat', 'notification', 'mail'])
 
@@ -75,6 +77,16 @@ const toRow = (r: Raw): EventRow => {
   if (r.body !== null) row.body = r.body
   if (r.seen_at !== null) row.seenAt = r.seen_at
   return row
+}
+
+/**
+ * What Mini is given of any event: one-time codes in its title and text masked, so a mail, a message or a notification
+ * cannot get Mini to pass a code on. The owner sees it whole.
+ */
+const forViewer = (row: EventRow, as: Viewer): EventRow => {
+  if (as.caller !== 'agent') return row
+  const [title, body] = maskCodes(row.title, row.body)
+  return { ...row, ...(title === undefined ? {} : { title }), ...(body === undefined ? {} : { body }) }
 }
 
 /** The target a grant for this scope is kept under: the device, or the whole connector. */
@@ -164,7 +176,7 @@ export class Events {
     }
     const limit = Math.min(Math.max(q.limit ?? 50, 1), 200)
     const sql = `SELECT * FROM events ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY occurred_at DESC, id DESC LIMIT ${limit + 1}`
-    const rows = (this.#db.prepare(sql).all(...args) as Raw[]).map(toRow)
+    const rows = (this.#db.prepare(sql).all(...args) as Raw[]).map(r => forViewer(toRow(r), as))
     const more = rows.length > limit
     const items = more ? rows.slice(0, limit) : rows
     const last = items.at(-1)
@@ -176,7 +188,7 @@ export class Events {
     const sql = `SELECT * FROM events WHERE id = ?${visible ? ` AND ${visible.sql}` : ''}`
     const r = this.#db.prepare(sql).get(id, ...(visible?.args ?? [])) as Raw | undefined
     if (!r) throw new ApiFailure(404, 'not-found', 'There is no such event.')
-    return toRow(r)
+    return forViewer(toRow(r), as)
   }
 
   markSeen(ids: number[]): void {
@@ -190,11 +202,37 @@ export class Events {
     return this.#db.transaction(() => ids.reduce((n, id) => n + stmt.run(id).changes, 0))()
   }
 
+  /** Deletes every event of these types, 5,000 rows to a transaction (one after another, without a pause). */
+  removeTypes(types: EventType[]): number {
+    return this.#removeWhere(`type IN (${types.map(() => '?').join(', ')})`, types)
+  }
+
+  /** Deletes the events of one type that happened before a time (Settings > Data), 5,000 rows to a transaction. */
+  removeOlder(type: EventType, before: number): number {
+    return this.#removeWhere('type = ? AND occurred_at < ?', [type, before])
+  }
+
+  #removeWhere(where: string, args: unknown[]): number {
+    const stmt = this.#db.prepare(`DELETE FROM events WHERE id IN (SELECT id FROM events WHERE ${where} LIMIT ${REMOVE_CHUNK})`)
+    const chunk = this.#db.transaction((): number => stmt.run(...args).changes)
+    let total = 0
+    for (let n = chunk(); n > 0; n = n < REMOVE_CHUNK ? 0 : chunk()) total += n
+    return total
+  }
+
   counts(since: number, as: Viewer): Partial<Record<EventType, number>> {
     const visible = this.#visibleSql(as)
     const sql = `SELECT type, count(*) AS n FROM events WHERE occurred_at >= ?${visible ? ` AND ${visible.sql}` : ''} GROUP BY type`
     const rows = this.#db.prepare(sql).all(since, ...(visible?.args ?? [])) as Array<{ type: EventType; n: number }>
     return Object.fromEntries(rows.map(r => [r.type, r.n]))
+  }
+
+  /** Counts per local day and type since a time, for the kinds asked; what the viewer may see only. */
+  countsByDay(since: number, types: EventType[], as: Viewer): Array<{ day: string; type: EventType; n: number }> {
+    const visible = this.#visibleSql(as)
+    const sql = `SELECT date(occurred_at / 1000, 'unixepoch', 'localtime') AS day, type, count(*) AS n FROM events
+      WHERE occurred_at >= ? AND type IN (${types.map(() => '?').join(', ')})${visible ? ` AND ${visible.sql}` : ''} GROUP BY day, type`
+    return this.#db.prepare(sql).all(since, ...types, ...(visible?.args ?? [])) as Array<{ day: string; type: EventType; n: number }>
   }
 
   people(as: Viewer, since = 0): PersonRow[] {
@@ -213,7 +251,8 @@ export class Events {
       if (deviceId && d.id !== deviceId) continue
       for (const t of wanted) {
         const scope = eventScope(t, d.kind)
-        if (scope === 'own' || scope === 'person') continue
+        // A device is only asked about its own connector's scopes: a mail account never about a phone's, nor the other way round.
+        if (scope === 'own' || scope === 'person' || SCOPES[scope].connector !== d.connectorId) continue
         const target = grantTarget(scope, d.id)
         if (this.#grants.get(target, scope).mini === 'ask' && !out.some(o => o.target === target && o.scope === scope)) out.push({ target, scope, deviceId: d.id })
       }
@@ -242,7 +281,7 @@ export class Events {
     for (const d of this.#devices.list()) {
       const types = EVENT_TYPES.filter(t => {
         const scope = eventScope(t, d.kind)
-        if (scope === 'own' || scope === 'person') return false
+        if (scope === 'own' || scope === 'person' || SCOPES[scope].connector !== d.connectorId) return false
         if (as.voice && PRIVATE_TYPES.has(t) && !as.voicePrivate) return false
         return this.#grants.get(grantTarget(scope, d.id), scope).mini === 'on' || extra.has(`${d.id}|${scope}`)
       })

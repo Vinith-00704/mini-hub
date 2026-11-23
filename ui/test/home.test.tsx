@@ -34,10 +34,11 @@ describe('home tiles', () => {
     expect(tamil.className).toContain('truncate')
   })
 
-  test('empty tiles say what to switch on', async () => {
+  test('a tile with nothing behind it yet says it is not connected, and what it needs', async () => {
     mockApi({ 'GET /v1/events': { items: [] }, 'GET /v1/settings': { privacy: false } })
     wrap(<CallsTile />)
-    expect(await screen.findByText('Nothing yet. Turn on what to collect in Permissions.')).toBeInTheDocument()
+    expect(await screen.findByText('Not connected yet')).toBeInTheDocument()
+    expect(screen.getByText(/Calls arrive from your phone/)).toBeInTheDocument()
   })
 
   test('a failed tile says so and can retry', async () => {

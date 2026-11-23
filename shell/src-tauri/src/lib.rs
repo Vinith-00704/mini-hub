@@ -13,6 +13,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, RunEvent, State};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use keys::{database_key, new_key, CredentialStore};
@@ -22,6 +23,10 @@ const SHORTCUT: &str = "ctrl+alt+h";
 const SHORTCUT_LABEL: &str = "Ctrl+Alt+H";
 // Started by Windows at sign-in: stay in the tray until opened.
 const HIDDEN_ARG: &str = "--hidden";
+// Backups (Settings > Data): the file pickers' filter and the name a save starts with.
+const BACKUP_FILTER: &str = "Mini Hub backup";
+const BACKUP_EXT: &str = "minihub";
+const BACKUP_DEFAULT: &str = "mini-hub-backup.minihub";
 
 struct Hub {
     port: Option<u16>,
@@ -232,6 +237,28 @@ fn shortcut_status(state: State<'_, Mutex<Hub>>) -> ShortcutStatus {
     ShortcutStatus { key: SHORTCUT_LABEL, ok: state.lock().map(|h| h.shortcut_ok).unwrap_or(false) }
 }
 
+/// The file name a save dialog starts with: the dashboard's suggestion when it is a plain name, else the default.
+fn backup_name(suggested: &str) -> String {
+    let plain = (1..=80).contains(&suggested.chars().count())
+        && suggested.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, ' ' | '.' | '_' | '-'));
+    if plain { suggested.to_string() } else { BACKUP_DEFAULT.to_string() }
+}
+
+/// Where to write a backup, chosen by the owner in Windows' own save dialog. None when they cancel.
+#[tauri::command]
+async fn pick_backup_save(app: AppHandle, suggested: String) -> Option<String> {
+    // An async command runs off the main thread, so the blocking dialog does not stall the window.
+    let picked = app.dialog().file().add_filter(BACKUP_FILTER, &[BACKUP_EXT]).set_file_name(backup_name(&suggested)).blocking_save_file()?;
+    picked.into_path().ok().map(|p| p.to_string_lossy().into_owned())
+}
+
+/// Which backup to restore, chosen by the owner in Windows' own open dialog. None when they cancel.
+#[tauri::command]
+async fn pick_backup_open(app: AppHandle) -> Option<String> {
+    let picked = app.dialog().file().add_filter(BACKUP_FILTER, &[BACKUP_EXT]).blocking_pick_file()?;
+    picked.into_path().ok().map(|p| p.to_string_lossy().into_owned())
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         // First: a second launch only brings the running one forward.
@@ -246,7 +273,9 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![hub_keys, autostart_get, autostart_set, shortcut_status])
+        // Only the shell's own commands below open its dialogs; the window is given no dialog permission.
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![hub_keys, autostart_get, autostart_set, shortcut_status, pick_backup_save, pick_backup_open])
         .setup(|app| {
             let handle = app.handle().clone();
             let mut hub = start_hub(&handle);

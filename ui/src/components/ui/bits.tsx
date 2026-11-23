@@ -1,39 +1,29 @@
 // Small pieces used everywhere: status dots, chips, empty states, one-line text, relative times.
 
 import type { ReactNode } from 'react'
+import { Empty as LookEmpty, Tag } from '../look/index.ts'
 
 type Tone = 'ok' | 'warn' | 'danger' | 'muted' | 'info'
 
 const DOT: Record<Tone, string> = { ok: 'bg-ok', warn: 'bg-warn', danger: 'bg-danger', muted: 'bg-ink-3', info: 'bg-info' }
-const CHIP: Record<Tone, string> = {
-  ok: 'text-ok border-ok/40',
-  warn: 'text-warn border-warn/40',
-  danger: 'text-danger border-danger/40',
-  muted: 'text-ink-2 border-line',
-  info: 'text-info border-info/40',
-}
 
 /** A coloured dot always has a word beside it: colour is never the only signal. */
 export function Dot({ tone, label }: { tone: Tone; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-small text-ink-2">
-      <span aria-hidden className={`h-2 w-2 rounded-full ${DOT[tone]}`} />
+      <span aria-hidden className={`h-2 w-2 ${DOT[tone]}`} />
       {label}
     </span>
   )
 }
 
+/** A small status label: the look's Tag. */
 export function Chip({ tone = 'muted', children }: { tone?: Tone; children: ReactNode }) {
-  return <span className={`inline-flex h-5 items-center rounded-chip border px-1.5 text-micro whitespace-nowrap ${CHIP[tone]}`}>{children}</span>
+  return <Tag tone={tone === 'info' ? 'muted' : tone}>{children}</Tag>
 }
 
 export function Empty({ text, action }: { text: string; action?: ReactNode }) {
-  return (
-    <div className="flex h-full min-h-20 flex-col items-start justify-center gap-2 text-small text-ink-3">
-      <p>{text}</p>
-      {action}
-    </div>
-  )
+  return <LookEmpty text={text} action={action} />
 }
 
 /** Text on one line: cut with an ellipsis, with the whole of it on hover. */

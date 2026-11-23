@@ -29,8 +29,18 @@ export interface Connector {
     multiple: boolean                // may there be more than one device of this kind
   }
 
-  /** Guided setup, one step at a time. Each step says what to show and what to ask. */
-  setup(ctx: Ctx, step: string | null, input: unknown): Promise<SetupStep>
+  /**
+   * Guided setup, one step at a time (optional). Each step says what to show and what to ask. `session` is the hub's id
+   * for this run of the wizard (it lasts 15 minutes); anything held between steps, such as a password not yet saved, is
+   * kept under it, in memory only. The connector drops everything unsaved for that session when it answers `done` or
+   * `error`, and when it is called with `step: 'cancel'`. The hub sends `cancel` whenever a run ends: the owner
+   * cancelled or started again, the 15 minutes ran out (also while a step was still under way), a step failed, and
+   * after `done` and `error` too, so a second `cancel` for the same session must be harmless.
+   */
+  setup?(ctx: Ctx, session: string, step: string | null, input: unknown): Promise<SetupStep>
+
+  /** The owner removed one of this connector's devices: stop using it and forget its settings and secrets (optional). */
+  remove?(deviceId: string): Promise<void>
 
   start(ctx: Ctx): Promise<void>
   stop(): Promise<void>
@@ -44,21 +54,35 @@ export interface Connector {
     args: ZodType
     /** A plain-words question for the approval, built from the real arguments. Required for 'act' and 'important'. */
     describe(args: unknown, device?: Device): string
-    run(ctx: Ctx, args: unknown, device?: Device): Promise<unknown>
+    run(args: unknown, device?: Device, how?: { origin: 'person' | 'agent'; approved: boolean; approvalId?: string }): Promise<unknown>
   }>
 }
 
 export interface Ctx {
-  emit(event: NewEvent): void                 // stores it (if its collect switch is on) and tells the dashboard
-  devices: { upsert(d: DeviceInput): Device; setState(id: string, state: object): void; list(): Device[] }
-  settings: { get(): object; set(patch: object): void }
+  emit(event: NewEvent & { deviceId: string }): void  // stores it (if its collect switch is on) and tells the dashboard
+  devices: { upsert(d: DeviceInput): Device; setState(id: string, state: object): void; list(): Device[]; get(id: string): Device | undefined }
+  // This connector's own settings (`connectors.settings_json`); `set` merges one level deep, a key set to undefined goes.
+  settings: { get(): Record<string, unknown>; set(patch: Record<string, unknown>): void }
+  // This connector's own secrets, only in the encrypted database's `secrets` table. Never logged or returned.
   secrets: { get(name: string): string | undefined; set(name: string, value: string): void; delete(name: string): void }
+  // Read only: whether a device's collect switch for a scope is on, and a call when any switch changes.
+  grants: { collecting(deviceId: string, scope: ScopeId): boolean; onChange(fn: () => void): () => void }
   log: Logger                                 // redacting
   signal: AbortSignal                         // fires on stop and on Stop Mini
 }
 
+export type Field = {
+  name: string
+  label: string
+  kind: 'text' | 'email' | 'password' | 'number' | 'choice'
+  required: boolean
+  value?: string | number                     // a starting value; never a password
+  hint?: string
+  choices?: Array<{ value: string; label: string }>
+}
+
 export type SetupStep =
-  | { kind: 'form'; id: string; title: string; text: string; fields: Field[] }       // ask for values
+  | { kind: 'form'; id: string; title: string; text: string; fields: Field[]; error?: string }  // ask for values; `error` when the last answer did not work
   | { kind: 'show'; id: string; title: string; text: string; qr?: string; code?: string }   // show something and wait
   | { kind: 'confirm'; id: string; title: string; text: string }
   | { kind: 'done'; devices: string[] }
@@ -130,26 +154,93 @@ the PC") with a Stop button, and Stop on either device ends it.
 
 ## `mail`: a mail account
 
-**Setup**: the account's address, the provider (Gmail and Outlook fill in the servers; "other" asks for them), and
-an app password. For Gmail this is a 16-character app password from the Google account's security page, which
-needs 2-step verification on. The steps show exactly where to make it. The password is kept through `ctx.secrets`.
-More than one account can be added.
+The owner's own mail account, read over IMAP and sent from over SMTP with the owner's address and an **app password**.
+No OAuth, no Google Cloud project, no third party: the hub talks only to the account's own servers, always over TLS
+(implicit TLS, or STARTTLS with TLS required), with the certificate checked; a plain connection is never tried. More
+than one account can be added; each is its own device (`mail-<12 hex>`, kind `mail-account`) with its own switches,
+all starting **off**. Code: `core/src/connectors/mail/`. Libraries: `imapflow` 2.11.0, `nodemailer` 10.4.0,
+`html-to-text` 10.0.1, created with their logging off.
 
-**How it works**: IMAP with IDLE on the inbox, so new mail arrives at once; a full check every 15 minutes as a
-safety net. Each new message becomes a `mail` event with the sender, the subject and a plain-text extract
-(`04` says how much). Attachments are listed, not downloaded.
+**Providers**
 
-**Actions**
-
-| Action | Does | Scope | Risk |
+| Provider | IMAP | SMTP | Sent mail |
 |---|---|---|---|
-| `search` | Searches the account on the server (for mail older than the hub has) | `mail.read` | read |
-| `read` | Fetches one message's full text | `mail.read` | read |
-| `mark` | Marks read or unread, flags | `mail.change` | act |
-| `draft` | Writes a draft into the account's Drafts folder | `mail.change` | act |
-| `archive` | Moves a message out of the inbox into the archive | `mail.change` | act |
-| `delete` | Moves a message to the bin | `mail.change` | important |
-| `send` | Sends a message or a reply | `mail.send` | important |
+| Gmail | `imap.gmail.com:993` TLS | `smtp.gmail.com:465` TLS | Gmail keeps the sent copy |
+| Outlook.com or Microsoft 365 | `outlook.office365.com:993` TLS | `smtp-mail.outlook.com:587` STARTTLS | Outlook keeps the sent copy |
+| Another provider | asked (default 993, TLS) | asked (default 465, TLS) | the hub appends the sent message to the `\Sent` folder, read |
+
+Gmail needs 2-Step Verification and an app password made at myaccount.google.com/apppasswords (spaces in what is
+pasted are removed). **Outlook caveat:** Microsoft has been turning app passwords off for Outlook.com and Microsoft
+365; the choice is offered, and if Microsoft refuses the sign-in this version of Mini Hub cannot connect that account
+(the wizard says so).
+
+**Setup** (the wizard, `setup(session, step, input)`):
+
+1. **Add a mail account**: the provider, the address (a plain ASCII address) and a name in Mini Hub (the address if
+   empty). An address already added is refused. Started with `input.device` set to an existing account, the wizard
+   goes straight to step 3: **Change the app password**.
+2. **Mail servers** (another provider only): IMAP and SMTP server, port and security (TLS or STARTTLS), and the user
+   name (the address unless changed).
+3. **App password**, with the provider's own instructions. Submitting it checks it: IMAP sign-in, the inbox opened
+   read-only and the folders listed, then SMTP sign-in. A failure brings the same form back with a plain reason (the
+   password was refused; the server could not be reached; its certificate could not be checked; reading works but
+   sending did not; or "the check did not work"), never the server's own words.
+4. Done: the device is added (or kept, when the password changed), the password saved in the encrypted database's
+   `secrets` table (`<deviceId>.password`), and the account's place in its inbox reset. Every switch stays off.
+
+The password is held only in that run of the wizard until it is saved; a cancel, the 15-minute limit or a failed
+check drops it. It is never returned, shown, logged, audited, exported or put in an error or a device's `info`.
+
+**How it works**: an account is watched (an IMAP connection held open) **only while its Reading mail switch
+(`mail.read` collect) is on**; turning it off closes the connection at once and nothing more is fetched or stored.
+Mail is collected **from the moment watching starts**: no history is imported. While the switch stays on, mail that
+arrives while the hub is off is caught up at the next start; mail that arrives while the switch is off is never
+fetched, and turning it on again starts from then. Older mail is reached through `search`, on the server.
+
+- IMAP IDLE on the inbox, so new mail arrives at once; a server without IDLE gets `STATUS INBOX` every 60 s; a full
+  check every 15 minutes as a safety net. One fetch at a time per account, at most 200 mails a round.
+- Each new mail becomes a `mail` event (`04` > Event types): the sender, the subject, and the text as Settings > Data
+  says (default the first 2,000 characters). The text is the first plain-text part, else the HTML part turned to plain
+  text (no images, no link targets), at most 256 KiB of it fetched, by peek: the hub never marks mail read. Attachments
+  are listed, never downloaded. A mail that cannot be read is skipped, never retried for ever.
+- A lost connection is tried again after 5 s, 15 s, 60 s, then every 5 minutes ("Cannot reach the mail server.
+  Trying again.", or "The mail server's certificate could not be checked. Trying again."); the wait starts again at
+  5 s only after a check has worked. A check that fails on a live connection is logged as a word, never the details. A refused password stops trying until the owner enters it again ("The mail server refused the
+  password. Enter it again on this account's page.").
+- Health: `off` when no account is added; `ok` when every account is watching or not collected; `degraded` when some
+  collected accounts have trouble; `down` when all of them do. Stop Mini does not stop watching.
+- Removing the account closes its connections and deletes its password and its place in the inbox.
+
+**Actions** (each opens its own short IMAP connection, at most two at once per account, at most 60 s; SMTP at most
+30 s; none sets `\Seen` except `mark`). A message is named by `ref`: `{ event }` (a `mail` event of this account) or
+the `{ folder, uid, uidValidity }` that `search` gave; a mailbox rebuilt since then gives "That mail has moved or the
+mailbox was rebuilt. Search again."
+
+| Action | Arguments | Does | Scope | Risk |
+|---|---|---|---|---|
+| `search` | `text?`, `from?` (1–200), `since?`, `before?` (`YYYY-MM-DD`), `folder?` (`inbox`, `all`, `sent`; default `inbox`), `limit?` (1–50, default 20); at least one of `text`, `from`, `since` | Searches the account on the server (for mail older than the hub has); newest first; senders, subjects, dates, unread and attachments, no text. `all` is the `\All` folder where the account has one (Gmail), else the inbox | `mail.read` | read |
+| `read` | `ref` | One message's sender, recipients, date, subject, text (at most 100,000 characters) and attachments, by peek | `mail.read` | read |
+| `mark` | `ref`, `read?`, `flagged?` (at least one) | Marks read or unread, flagged or not | `mail.change` | act |
+| `draft` | `to`, `cc?`, `bcc?`, `subject`, `text`, `replyTo?` | Writes a draft into the Drafts folder (`\Drafts`, else `Drafts`, `[Gmail]/Drafts`, `INBOX.Drafts`), flagged `\Draft` and read | `mail.change` | act |
+| `archive` | `ref` | Moves it to the archive (`\Archive`; Gmail: All Mail, which takes it out of the inbox) | `mail.change` | act |
+| `delete` | `ref` | Moves it to the bin (`\Trash`); never deletes for good | `mail.change` | important |
+| `send` | `to`, `cc?`, `bcc?`, `subject`, `text`, `replyTo?` | Sends from the account's address; a reply gets `In-Reply-To` and `References` from the original (a well-formed Message-ID only). Answers `{ sent: true, messageId }`; for another provider, if the copy in Sent could not be saved, also `note: "Sent, but the copy could not be saved in Sent."` | `mail.send` | important |
+| `check` | none (owner only, in Mini Hub) | Checks for new mail now; refused while Reading mail is not collected | `mail.read` | read |
+
+Recipients are plain ASCII addresses, at most 20 across To, Cc and Bcc; the subject is one line of at most 300
+characters, with no control characters; the text 1–20,000 characters. `archive` and `delete` move with MOVE (or UIDPLUS);
+on a server with neither they refuse ("This mail server cannot move one mail safely, so Mini Hub will not archive or
+delete here. Do it in your mail app."), because the only other way would expunge every mail marked deleted. **The approval shows exactly what is sent or drafted** (From, To, Cc, Bcc,
+Subject, the reply's original and the whole text): the arguments are never trimmed or changed, nothing is added (no
+signature, no quoted original), and a second send needs a second approval. A send the server refuses fails with "The
+mail server did not send it: <plain reason>" and nothing goes to Sent. A sent reply's draft stays in Drafts; nothing
+deletes it without the owner. In an approval, the original mail's sender and subject are one line each (line breaks,
+controls and direction overrides become spaces), at most 200 characters.
+
+**One-time codes**: in every mail result Mini gets (`search`, `read`), and in the title and text of every event it
+reads through the events routes (mail, messages, chats, notifications, calls), a subject or text that mentions a code (`otp`, `code`, `pin`, `passcode`, `verification`) has every number
+of 4 to 8 digits shown as `••••••` (`maskCodes` in `protocol/src/events.ts`, the dashboard's rule). The owner sees
+the whole text in Mini Hub.
 
 **Widgets**: `mail`.
 

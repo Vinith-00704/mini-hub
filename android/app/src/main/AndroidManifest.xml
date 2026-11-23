@@ -11,11 +11,16 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Voice: used only while the Talk sheet is on screen, after the owner tapped Talk (docs/08 > Voice). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
+    <!-- The record: each asked for only from its own button on the Permissions screen, while its switch is on. -->
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <!-- Names for SMS senders, used only on the phone. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <queries>
         <package android:name="com.termux" />
@@ -24,6 +29,11 @@
         </intent>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <!-- "Apps to include": the launchable apps, and their names for the record. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
 
@@ -45,13 +55,39 @@
             </intent-filter>
         </activity>
 
+        <!-- The Talk sheet: the only place the microphone opens. Its own task, never in recents, never over the lock
+             screen; it closes when it leaves the screen. -->
+        <activity
+            android:name=".voice.TalkActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:taskAffinity="app.minihub.phone.talk"
+            android:launchMode="singleInstance"
+            android:showWhenLocked="false" />
+
         <service
             android:name=".MiniService"
             android:exported="false"
-            android:foregroundServiceType="specialUse|microphone">
+            android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps the owner's floating assistant (Mini) on screen and connected to its Claude Code session in Termux, until the owner stops it." />
+                android:value="Keeps the owner's floating assistant (Mini) and its record of the phone's calls, messages and notifications running, until the owner stops it." />
+        </service>
+
+        <!-- Chat messages and other notifications, from the apps the owner ticks. Enabled by the app the first time
+             Messages or Other notifications is collected, and never disabled (Android would forget the owner's
+             grant); while both are off the app asks Android to unbind it. Bound by Android only once the owner
+             gives it notification access in Settings. -->
+        <service
+            android:name=".collect.NotesListener"
+            android:exported="true"
+            android:enabled="false"
+            android:label="Mini"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
         </service>
 
         <receiver

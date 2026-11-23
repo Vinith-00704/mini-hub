@@ -3,7 +3,7 @@
 
 import { createHash } from 'node:crypto'
 import type { Risk } from '@minihub/protocol'
-import type { Store } from '../store/db.ts'
+import { getMeta, setMeta, type Store } from '../store/db.ts'
 
 export type Caller = 'person' | 'agent' | 'device' | 'voice' | 'system'
 export type Outcome = 'done' | 'refused' | 'failed' | 'waiting'
@@ -40,6 +40,8 @@ export type AuditQuery = {
 }
 
 const ZERO = '0'.repeat(64)
+/** The hash of the newest row pruning removed: the chain goes on from it (Settings > Data). */
+const ANCHOR = 'auditAnchor'
 // Ids and counts go in the data, not words: a value this long is someone's text.
 const MAX_DATA_TEXT = 200
 
@@ -100,7 +102,8 @@ export class Audit {
     checkData(data)
     const insert = this.#db.transaction((): Raw => {
       const last = this.#db.prepare('SELECT hash FROM audit ORDER BY id DESC LIMIT 1').get() as { hash: string } | undefined
-      const prev = last?.hash ?? ZERO
+      // An empty log after pruning goes on from the last row removed, so the check still holds.
+      const prev = last?.hash ?? getMeta(this.#db, ANCHOR) ?? ZERO
       const body = {
         at: this.#now(),
         caller: e.caller,
@@ -139,9 +142,23 @@ export class Audit {
     return (this.#db.prepare(sql).all(args) as Raw[]).map(toRow)
   }
 
+  /**
+   * Removes the rows written before a time, in one transaction, keeping the hash of the newest one removed as the
+   * chain's new start. Returns how many went; the caller writes the row that says so.
+   */
+  pruneBefore(at: number): number {
+    return this.#db.transaction((): number => {
+      const newest = this.#db.prepare('SELECT id, hash FROM audit WHERE at < ? ORDER BY id DESC LIMIT 1').get(at) as { id: number; hash: string } | undefined
+      if (!newest) return 0
+      setMeta(this.#db, ANCHOR, newest.hash)
+      return this.#db.prepare('DELETE FROM audit WHERE id <= ?').run(newest.id).changes
+    })()
+  }
+
   /** Walks the whole chain. The first row whose hash does not follow from the one before is where it broke. */
   check(): { ok: true } | { ok: false; brokenAt: number } {
-    let prev = ZERO
+    // After pruning the first row left follows the newest row removed.
+    let prev = getMeta(this.#db, ANCHOR) ?? ZERO
     for (const r of this.#db.prepare('SELECT * FROM audit ORDER BY id').iterate() as IterableIterator<Raw>) {
       if (r.prev_hash !== prev || hashOf(prev, r) !== r.hash) return { ok: false, brokenAt: r.id }
       prev = r.hash

@@ -1,4 +1,5 @@
-// Logs say what happened, never what was in it: message and mail text, names, arguments, tokens and keys are hidden.
+// Logs say what happened, never what was in it: message and mail text, names, mail addresses and subjects, arguments,
+// passwords, tokens and keys are hidden.
 
 import pino, { type DestinationStream, type Logger as Pino } from 'pino'
 
@@ -11,6 +12,11 @@ export const REDACT = [
   'key',
   'dbKey',
   'personKey',
+  'password',
+  'pass',
+  'passphrase',
+  'address',
+  'subject',
   '*.body',
   '*.text',
   '*.who',
@@ -19,6 +25,11 @@ export const REDACT = [
   '*.key',
   '*.dbKey',
   '*.personKey',
+  '*.password',
+  '*.pass',
+  '*.passphrase',
+  '*.address',
+  '*.subject',
   'req.headers["x-hub-ui"]',
   'req.headers.authorization',
 ]

@@ -18,8 +18,8 @@ android {
         applicationId = "app.minihub.phone"
         minSdk = 33
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 5
+        versionName = "0.5.0"
         // The owner's phone (and every phone this app targets) is 64-bit ARM; leaving the others out keeps the app small.
         ndk { abiFilters += listOf("arm64-v8a") }
         // On-device tests run in the trial build only, never in the owner's app.
@@ -54,6 +54,13 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 }
+
+// The look's colours come from design/tokens.json; the build stops if Tokens.kt was not regenerated (npm run tokens).
+val tokensCheck by tasks.registering(Exec::class) {
+    workingDir = rootProject.file("..")
+    commandLine(if (System.getProperty("os.name").startsWith("Windows")) listOf("cmd", "/c", "node", "tools/tokens.mjs", "--check") else listOf("node", "tools/tokens.mjs", "--check"))
+}
+tasks.named("preBuild") { dependsOn(tokensCheck) }
 
 dependencies {
     // The record, encrypted (docs/08 > The record); its key is wrapped by the Android Keystore.

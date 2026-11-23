@@ -11,10 +11,15 @@ import { ApiFailure } from '../rules/policy.ts'
 import { liveRoutes } from './live.ts'
 import { actionRoutes } from './routes/actions.ts'
 import { basicRoutes } from './routes/basics.ts'
+import { boardRoutes } from './routes/boards.ts'
+import { connectorRoutes } from './routes/connectors.ts'
+import { dataRoutes } from './routes/data.ts'
 import { deviceRoutes } from './routes/devices.ts'
 import { pairingRoutes } from './routes/pairing.ts'
+import { statsRoutes } from './routes/stats.ts'
 import { eventRoutes } from './routes/events.ts'
 import { miniRoutes } from './routes/mini.ts'
+import { networkRoutes } from './routes/network.ts'
 import { ruleRoutes } from './routes/rules.ts'
 import { settingsRoutes } from './routes/settings.ts'
 
@@ -133,11 +138,16 @@ export async function buildServer(hub: Hub, keys: Keys, opts: { uiOrigin?: strin
     basicRoutes(scope, hub)
     eventRoutes(scope, hub)
     deviceRoutes(scope, hub)
+    connectorRoutes(scope, hub)
     pairingRoutes(scope, hub)
+    statsRoutes(scope, hub)
     actionRoutes(scope, hub)
     ruleRoutes(scope, hub)
     miniRoutes(scope, hub)
     settingsRoutes(scope, hub)
+    boardRoutes(scope, hub)
+    dataRoutes(scope, hub)
+    networkRoutes(scope, hub)
     liveRoutes(scope, hub, keys)
   })
   return app

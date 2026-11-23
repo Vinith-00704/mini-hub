@@ -5,7 +5,8 @@
 // Exit codes: 0 stopped normally, 2 the keys or the data could not be used, 3 already running.
 
 import { randomBytes } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { createInterface } from 'node:readline'
 import pino from 'pino'
 import { buildServer } from './api/server.ts'
@@ -69,6 +70,17 @@ const takeLock = (lock: string): boolean => {
   return false
 }
 
+/**
+ * The installed app, when the core runs from one: the app keeps the core in a `core` folder next to `mini-hub.exe`.
+ * Mini starts it to bring the window forward. Undefined in development.
+ */
+const installedShell = (): string | undefined => {
+  const script = process.argv[1]
+  if (!script || basename(dirname(script)) !== 'core') return undefined
+  const exe = join(dirname(dirname(script)), 'mini-hub.exe')
+  return existsSync(exe) ? exe : undefined
+}
+
 const writeAtomic = (file: string, text: string): void => {
   const tmp = `${file}.${process.pid}.tmp`
   writeFileSync(tmp, text, { mode: 0o600 })
@@ -104,7 +116,8 @@ async function main(): Promise<void> {
   const app = await buildServer(hub, { person: keys.personKey, agent: agentToken }, { ...(keys.uiOrigin ? { uiOrigin: keys.uiOrigin } : {}), logger: log })
   await app.listen({ host: '127.0.0.1', port: 0 })
   const port = (app.server.address() as { port: number }).port
-  writeAtomic(f.info, JSON.stringify({ port, token: agentToken, pid: process.pid, version: VERSION }))
+  const shell = installedShell()
+  writeAtomic(f.info, JSON.stringify({ port, token: agentToken, pid: process.pid, version: VERSION, ...(shell ? { shell } : {}) }))
   hub.audit.append({ caller: 'system', action: 'start', outcome: 'done', data: { version: VERSION } })
   log.info({ port, version: VERSION }, 'hub started')
   process.stdout.write(`${JSON.stringify({ ready: true, port })}\n`)

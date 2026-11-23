@@ -17,6 +17,7 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-global-shortcut = "2"
+tauri-plugin-dialog = "=2.8.4"
 keyring = { version = "3", features = ["windows-native"] }
 getrandom = "0.3"
 ureq = "3"

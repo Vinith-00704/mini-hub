@@ -131,33 +131,92 @@ The canonical list; `protocol/src/events.ts` holds the exact shapes and `protoco
 
 | Type | From | Scope (collect, and the agent's reading) | `who` | `title` / `body` | `data_json` |
 |---|---|---|---|---|---|
-| `call` | phone | `phone.calls.read` | The other party | "Missed call", "Incoming, 4 min" | `direction` in/out/missed/rejected, `seconds`, `sim` |
+| `call` | phone | `phone.calls.read` | The other party | "Missed call", "Incoming, 4 min" | `direction` in/out/missed/rejected, `seconds` |
 | `sms` | phone | `phone.messages.read` | The other party | The text | `direction`, `thread` |
-| `chat` | phone, from a chat app's notification | `phone.messages.read` | Sender as the notification named them | The text | `conversation` (the group or chat title), `canReply`, `notificationKey` |
-| `notification` | phone | `phone.notifications.read` | n/a | Title and text | `category`, `ongoing` |
-| `mail` | mail connector | `mail.read` | Sender | Subject / a plain-text extract | `account`, `folder`, `messageId`, `hasAttachments`, `unread` |
+| `chat` | phone, from a chat app's notification | `phone.messages.read` | Sender as the notification named them | The text | `conversation` (the group or chat title), `canReply`, `notificationKey`, `package`, `group` |
+| `notification` | phone | `phone.notifications.read` | n/a | Title and text | `category`, `package`, `notificationKey`, `ongoing` (always false: ongoing notifications are never recorded) |
+| `mail` | mail connector | `mail.read` | Sender (name, else address; `who_key` the address in lower case) | Subject, or "(no subject)" / the text as Settings > Data says (none, the first 2,000 characters, or the first 20,000) | `account` (the mail device's id), `folder` (`INBOX`), `uid`, `uidValidity`, `messageId`, `hasAttachments`, `attachments` (at most 20: `name`, `type`, `size`; listed, never downloaded), `unread`, `to` and `cc` (at most 10 addresses each) |
 | `device_state` | any device | The device's status scope: `phone.usage.read`, `pc.status.read`, `home.read` | n/a | "Battery 20%", "Came online" | The changed fields |
 | `app_usage` | phone, once a day | `phone.usage.read` | n/a | n/a | Minutes per app for the day |
 | `home_state` | home connector | `home.read` | n/a | "Bedroom lamp on" | `property`, `value`, `cause` |
-| `mini_action` | the hub, the phone app | Always collected. The agent reads only its own. | n/a | What Mini did, in a line | `tool`, `scope`, `risk`, `outcome`, `approvalId` |
+| `mini_action` | the hub, the phone app | Always collected. The agent reads only its own. | n/a | What Mini did, in a line, with counts only: never a name, a number or text from the record | `tool`, `scope`, `scopes`, `risk`, `outcome` (`done`, `refused`, `failed`), `reason` (a refusal's cause; the phone's are `not-allowed`, `not-collected`, `said-no`, `expired`, `stopped`, `unknown-tool`, `bad-args`), `approvalId`, `count`, `on` (`pc` or `phone`) |
 | `voice_request` | alexa connector | Always collected while that connector is on. Person only. | n/a | What was asked | `answered` |
 | `system` | any | Always collected. Person only. | n/a | "Dropped 1,204 old events to stay under the size limit" | n/a |
 
 Collecting a type is governed by its scope's **collect** switch for that device (`03`). A type whose switch is
 off is neither stored on the phone nor sent.
 
+The shapes of `data` for `call`, `sms`, `chat`, `notification` and `mini_action` are written down in `protocol/src/events.ts`
+(`EVENT_DATA`) for both sides to follow. They are a contract, not a gate: the hub never refuses an event over the
+shape of its `data`, because a refusal would stall the phone's sync. The call log's SIM slot (`sim`) is not
+recorded; it needs another permission.
+
 ## What is kept, and for how long
 
 | Where | Default | Owner can set |
 |---|---|---|
-| Hub: events | Kept until deleted | Keep 30 days, 90 days, a year, or for ever, per type |
-| Hub: mail bodies | The first 2,000 characters of text; attachments are not downloaded | Subjects only; or full text |
-| Hub: audit log | A year | Longer, or for ever |
+| Hub: events | Kept until deleted (for ever) | Keep 30 days, 90 days, a year, or for ever, per type (`call`, `sms`, `chat`, `notification`, `mail`, `device_state`, `mini_action`, `system`) |
+| Hub: mail bodies | The first 2,000 characters of text (`extract`); attachments are not downloaded | Subjects only (`subjects`); or full text (`full`, at most 20,000 characters) |
+| Hub: audit log | A year (`1y`) | Two years (`2y`), or for ever |
 | Phone: events not yet handed over | Up to 200 MB, then the oldest go, with a `system` event saying so | The size |
 | Phone: events already handed over | 7 days, so the phone app can still show recent history | 1 to 30 days |
 
-Deleting in the dashboard deletes from the hub. The owner can also delete "everything from this device" when
-removing it. An export (Settings > Data) writes an encrypted archive of the database to a folder the owner picks.
+The hub's choices are kept under the settings key `retention` as `{ events: { <type>: "forever" | "30d" | "90d" |
+"1y" }, audit: "1y" | "2y" | "forever", mailBody: "subjects" | "extract" | "full" }`; a type not named is kept for
+ever. A change takes effect at the next run, not at once.
+
+**Pruning** runs a minute after the hub starts and then every 6 hours. For each type with a limit it deletes the
+events whose `occurred_at` is older than 30, 90 or 365 days, 5,000 rows to a transaction. If any went, the hub
+writes one `system` event, "Removed <n> old items, as set in Settings > Data" (no text from the items), and an
+audit row (`system`, `prune`, `{ count, types }`). Audit rows older than one or two years go in one transaction: the
+hash of the newest row removed is kept in `meta` as `auditAnchor`, every row up to it is deleted, and a `system`
+audit row `prune-audit` with `{ count }` follows. The chain check starts from the anchor (`03` > The audit log).
+
+Deleting in the dashboard deletes from the hub: chosen items, or every item of some kinds (Settings > Data). The
+owner can also delete "everything from this device" when removing it.
+
+### The backup
+
+Settings > Data writes a backup to a file the owner picks (ending `.minihub`; files of this name are ignored by
+git), protected by a passphrase the owner types (10 to 200 characters), not by the database key, so it restores on
+a new PC. The passphrase and the path are never stored, logged or audited; the audit rows `export` and `import`
+carry counts only. A path inside the data folder is allowed.
+
+- **Format.** Bytes 0–3 the ASCII `MHX1`; 4–19 a random salt; 20–31 a random IV; then the ciphertext; the last 16
+  bytes the GCM tag. Key = `scrypt(passphrase (UTF-8), salt, 32, { N: 65536, r: 8, p: 1 })`; AES-256-GCM with bytes
+  0–31 as additional data. The plaintext is gzip of UTF-8 NDJSON, one object per line, in this order: a header
+  `{ kind: "header", format: "minihub-export", version: 1, hubVersion, exportedAt, counts }`; `setting` lines
+  `{ kind, key, value }` for `ui` and `retention`; `device` lines `{ kind, device: { id, connectorId, kind, name,
+  room, info, addedAt, removedAt } }` (the device sits in its own object because its `kind` is not the line's);
+  `board` lines `{ kind, id, name, position, layout }`; `event` lines `{ kind, deviceId, seq, type, occurredAt,
+  receivedAt, who, whoKey, app, title, body, data, seenAt }`. The database is read a page at a time, never whole in
+  memory, and the file is written beside the target (`<path>.<pid>.tmp`) and renamed over it when complete. An
+  export with no events is still a valid file.
+- **What it carries:** events, devices (without their tokens or state; a mail account's info never has its
+  password), boards, and the dashboard's settings (`ui`, `retention`). **What it does not:** secrets, device
+  tokens, the hub's certificate, collect switches and grants, approvals, pairings or the audit log.
+- **Restoring** reads the file twice. Pass 1 checks the header (`MHX1`, else "This is not a Mini Hub backup.") and
+  runs the whole ciphertext through the decipher with the output thrown away; a failed tag is "The passphrase is
+  wrong, or the file is damaged." and nothing is written. Pass 2 reads it again and applies it in transactions of
+  500 rows: a header with a newer `version` is refused before anything is applied ("This backup is from a newer
+  Mini Hub."); settings are replaced; a device is added if its id is missing, marked removed (a phone is paired
+  again, a mail account added again), except the hub's own device (id `hub`); a device already there is left as it is, and
+  this PC (`pc`) is never added again; a board replaces the one with its id, new ones go at the end, 20 in all (the
+  rest are counted as `boardsLeftOut`); an event is added unless its `(device_id, seq)` is already there, written
+  directly (Collect is not checked: it is the owner's own restore). Each device's numbering (`meta seq:<device>`,
+  `hubSeq`) is moved to at least the highest number restored, so new events are never taken for repeats. If the
+  file changes between the passes or the tag fails at the end of pass 2, the answer is "The file changed while it
+  was being read. Import it again." A restore that fails in pass 2 for any reason takes back what it had applied
+  (the events and devices it added, the boards and settings as they were; only the numbering stays moved on, which
+  never loses an event), so a failed restore changes nothing. If taking back fails too, the answer is "The restore
+  stopped partway, and some of it could not be taken back. Import it again."; importing again completes it, since a
+  second import adds nothing twice. A file that cannot be read is "The file could not be read.", a full disk
+  "There is not enough space to restore.", another database failure "The restore did not work. Nothing was
+  changed."; the hub's log gets the error's code only. A second import adds nothing twice.
+- **After a restore** every switch is as it was on this hub (off on a new one): nothing in the file is read as a
+  grant, collect switch, approval, secret, token or audit row. Restore into a clean data folder to get every event
+  back: on a hub that already numbered its own notes, an imported event with the same `(device_id, seq)` is
+  skipped and counted as such.
 
 ## Pairing a device
 
@@ -186,11 +245,20 @@ Version 1. The shapes live in `protocol/src/link.ts`.
 
 ```
 phone -> { t:"hello", v:1, deviceId, token, appVersion, lastSeq, time }
-hub   -> { t:"welcome", v:1, ackSeq, time, collect:{...}, settingsRev }      // or { t:"refused", reason }
+hub   -> { t:"welcome", v:1, ackSeq, time, collect:{...}, settingsRev }      // or { t:"refused", reason, code? }
 ```
 
 `lastSeq` is the phone's newest sequence number, `ackSeq` the highest the hub has stored. `collect` is the hub's
 copy of the collect switches for this device; see "Whose switches win".
+
+A `refused` carries a plain `reason` for the owner and, from newer hubs, a `code` the phone acts on. A `refused`
+without `code` (an older hub) means `not-paired`.
+
+| `code` | Meant | What the phone does |
+|---|---|---|
+| `not-paired` | The hub does not know this device or its token (wrong token, or the device was removed) | Shows the reason and does not retry; the owner pairs again |
+| `locked-out` | Five wrong tokens from this address | Shows "not at home" and retries once after 10 minutes |
+| `bad-frame` | The hub got a frame it could not read, or one before hello | Reconnects with the normal back-off |
 
 ### Handing over the record
 
@@ -200,10 +268,17 @@ hub   -> { t:"ack", seq }                                                    // 
 phone -> { t:"gap", from, to, reason }                                       // events the phone had to drop
 ```
 
+A gap's `reason` is a short plain line the dashboard shows, for example "deleted or not shared on the phone before
+it was sent" (the owner deleted them, or turned that kind's switch off, before the hub had them).
+
 - The phone sends from `ackSeq + 1`, waits for each `ack`, and goes on until it has caught up. Then it sends
   each new event as it happens, alone or in small batches.
 - The hub stores a batch in one transaction and ignores any `(deviceId, seq)` it already has, so a resend is harmless.
 - `events` out of order (a `from` that is not `ackSeq + 1`) is answered with `ack` of the hub's real position, and the phone restarts from there.
+- Paired again with the same hub (removed on the dashboard, or forgotten on the phone, then paired again): the hub
+  gives the phone a new id, so its `ackSeq` starts at 0. The phone keeps the hub's last `ack` by the hub's
+  certificate, and on the first link of the new pairing it sends a gap up to that number first ("already sent to
+  this PC before it was paired again"), so what the hub already has is not sent twice.
 
 ### Commands
 
@@ -231,8 +306,13 @@ phone -> { t:"stop-request" }                                                // 
 either -> { t:"ping", time }      other -> { t:"pong", time }      // every 30 seconds; two missed closes the link
 hub    -> { t:"settings", rev, collect:{...} }                     // when the owner changes a collect switch on the dashboard
 phone  -> { t:"state", battery, charging, network, brain:"ok"|"asleep"|"broken", controlling:false, stopped:false,
+            collect?, needs?:{ scope: "permission"|"notification-access"|"apps" },
             lists:{ mini:{ scope: state }, pc:{ scope: state } } }                                    // when it changes
 ```
+
+`needs` is set by the phone only for a scope whose collect switch is on and for which **no** source can run. Its
+value is the first thing missing, in the order `permission` (Android's permission), `notification-access`, `apps`
+(no app ticked in "Apps to include"). The dashboard shows it so the owner knows what to do on the phone.
 
 ### Finding the hub
 
@@ -248,6 +328,9 @@ The phone is the owner's most personal device, so **the phone's own switches are
 - Collect: the phone app has the switches; the dashboard shows them and can ask to change one. A change made on
   the dashboard reaches the phone as `settings` and takes effect only if the phone is not set to "only change
   these on the phone" (off by default, so the dashboard works; the owner can lock it).
+  A `settings` the phone does not take (locked, or not newer than the last one it took) is answered with its
+  `state`, so the hub's copy always shows what the phone really collects. A new pairing numbers `settings` from
+  the start again on both sides.
 - The three lists in `03` each live where they protect: "Mini may use" on the hub; "Mini on this phone" and "From
   my PC" on the phone. The hub shows the phone's two lists read-only, as the phone last reported them, so the
   owner can see on the dashboard why a command would be refused.
@@ -261,4 +344,3 @@ The phone's own tables mirror the hub's: `collect(scope, enabled)`, `grants(list
 - The exact JSON of each event's `data` beyond the fields named here.
 - Indexes beyond those listed, once real queries show what is slow.
 - The word list and the derivation for the four pairing words (any standard short-authentication-string scheme).
-- The backup archive's format.

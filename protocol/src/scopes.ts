@@ -47,3 +47,17 @@ export const SCOPES = {
 export type ScopeId = keyof typeof SCOPES
 
 export const isScope = (value: unknown): value is ScopeId => typeof value === 'string' && Object.hasOwn(SCOPES, value)
+
+// Scopes that exist only on the phone (docs/03 > Scopes). They are not in SCOPES on purpose: the hub offers no grant,
+// no Collect switch and no "From my PC" list for them, and the phone keeps them out of its state frame's lists. They
+// can still appear as the `scope` of a `mini_action` the phone records, so a check of that field accepts them.
+export const PHONE_ONLY_SCOPES = {
+  'phone.status.read': { label: 'Phone status', kind: 'read' },
+} as const satisfies Record<string, { label: string; kind: Risk }>
+
+export type PhoneOnlyScopeId = keyof typeof PHONE_ONLY_SCOPES
+
+export const isPhoneOnlyScope = (value: unknown): value is PhoneOnlyScopeId => typeof value === 'string' && Object.hasOwn(PHONE_ONLY_SCOPES, value)
+
+/** A hub scope or one only the phone has: for checking what a phone reports about its own actions. */
+export const isAnyScope = (value: unknown): value is ScopeId | PhoneOnlyScopeId => isScope(value) || isPhoneOnlyScope(value)

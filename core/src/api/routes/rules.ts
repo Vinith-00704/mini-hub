@@ -64,6 +64,13 @@ export function ruleRoutes(app: FastifyInstance, hub: Hub): void {
     return { stopped: true }
   })
 
+  // Disconnect everything (docs/03 > The stop button): Stop Mini, then close the device link.
+  app.post('/v1/disconnect', { config: { access: 'person', audit: 'disconnect' } }, async () => {
+    await hub.stopMini('person')
+    await hub.link.close()
+    return { disconnected: true }
+  })
+
   app.post('/v1/resume', { config: { access: 'person', audit: 'resume' } }, async () => {
     hub.stop.resume()
     return { stopped: false }

@@ -7,6 +7,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.util.Log
 import app.minihub.phone.consent.Audit
+import app.minihub.phone.consent.Prefs
 import app.minihub.phone.consent.Switches
 import app.minihub.phone.data.Record
 import java.util.concurrent.CopyOnWriteArrayList
@@ -37,6 +38,8 @@ class HubLink(
     private val record: Record,
     private val switches: Switches,
     private val audit: Audit,
+    /** Where each hub's last acked number (by its certificate, kept across pairings) and the time of the last cleanup are kept. */
+    private val prefs: Prefs,
     private val commands: () -> Commands,
     /** The phone's state frame, built fresh each time. */
     private val state: () -> Frame.State,
@@ -46,7 +49,7 @@ class HubLink(
     private val nsd = Discovery(context)
     private val worker = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "mini-link").apply { isDaemon = true } }
     private val backoff = Backoff()
-    private val sync = Sync({ after, limit -> record.after(after, limit) }, { record.latestSeq() })
+    private val sync = Sync({ after, limit -> record.after(after, limit) }, { record.latestSeq() }, Frames::eventSize)
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
 
     private var ws: WebSocket? = null
@@ -56,6 +59,8 @@ class HubLink(
     private var pinger: ScheduledFuture<*>? = null
     private var missed = 0
     private var lastFind = 0L
+    /** A lock-out is tried again once, after [LOCKOUT_RETRY_MS]; a second one waits for the owner or the network. */
+    private var lockedRetried = false
 
     @Volatile var status: LinkStatus = if (hubs.get() == null) LinkStatus.NotPaired else LinkStatus.NotAtHome
         private set
@@ -104,6 +109,7 @@ class HubLink(
     fun syncNow() = onLink {
         if (sync.linked) pump() else {
             backoff.reset()
+            lockedRetried = false
             connect()
         }
     }
@@ -112,6 +118,7 @@ class HubLink(
     fun relink() = onLink {
         close(if (hubs.get() == null) LinkStatus.NotPaired else LinkStatus.NotAtHome)
         backoff.reset()
+        lockedRetried = false
         connect()
     }
 
@@ -149,6 +156,16 @@ class HubLink(
         ws?.send(Frames.encode(f))
     }
 
+    /** What the hub has stays 7 days, then goes (docs/04). Checked on an ack, at most once a day; no timer. */
+    private fun cleanUp(acked: Long) {
+        val now = System.currentTimeMillis()
+        val last = prefs.get("prunedAt")?.toLongOrNull() ?: 0L
+        if (now - last <= CLEAN_EVERY_MS) return
+        val gone = record.prune(acked, now)
+        prefs.put("prunedAt", now.toString())
+        Log.i(TAG, "cleanup: $gone old events removed")
+    }
+
     private fun later() {
         if (!onWifi || status is LinkStatus.Refused || hubs.get() == null) return
         retry?.cancel(false)
@@ -181,7 +198,11 @@ class HubLink(
             when (val f = Frames.parse(text)) {
                 is Frame.Welcome -> {
                     backoff.reset()
-                    sync.welcome(f.ackSeq)
+                    lockedRetried = false
+                    // Paired again with this PC (a new id there): what it acked under the old pairing is not sent again.
+                    val keptBy = prefs.get("ackedBy:${hub.fp}")
+                    val kept = prefs.get("acked:${hub.fp}")?.toLongOrNull() ?: 0L
+                    sync.welcome(f.ackSeq, if (keptBy != null && keptBy != hub.deviceId) kept else 0L)
                     switches.applyFromHub(f.collect, f.settingsRev)
                     lastSync = System.currentTimeMillis()
                     set(LinkStatus.Linked)
@@ -192,21 +213,53 @@ class HubLink(
                 is Frame.Ack -> {
                     sync.ack(f.seq)
                     lastSync = System.currentTimeMillis()
+                    // Kept per hub certificate, not cleared when the phone is removed or the hub forgotten: if this
+                    // phone is paired with the same PC again, it knows what that PC already has.
+                    prefs.put("acked:${hub.fp}", f.seq.toString())
+                    prefs.put("ackedBy:${hub.fp}", hub.deviceId)
+                    cleanUp(f.seq)
                     pump()
                     listeners.forEach { it() }
                 }
-                is Frame.Settings -> switches.applyFromHub(f.collect, f.rev)
+                is Frame.Settings -> {
+                    // The phone's switches win: a change not taken (locked, or not newer) is answered with what the
+                    // phone has, so the hub's copy always follows it (docs/04 > Whose switches win).
+                    if (!switches.applyFromHub(f.collect, f.rev)) webSocket.send(Frames.encode(state()))
+                }
                 is Frame.Cmd -> commands().handle(f) { out -> onLink { webSocket.send(Frames.encode(out)) } }
                 Frame.Stop -> commands().stop { stopFromPc.forEach { it() } }
                 is Frame.Ping -> webSocket.send(Frames.encode(Frame.Pong(f.time)))
                 is Frame.Pong -> missed = 0
                 is Frame.Refused -> {
-                    // A removed phone stops trying at once (and does not count against the hub's wrong-token limit).
-                    close(LinkStatus.Refused(f.reason))
                     audit.add("Your PC", "link", outcome = "refused", detail = f.reason)
+                    when (f.code) {
+                        // Too many wrong tries: not at home for now, one more try after 10 minutes.
+                        "locked-out" -> {
+                            close(LinkStatus.NotAtHome)
+                            if (!lockedRetried) {
+                                lockedRetried = true
+                                retry = worker.schedule({ runCatching { connect() } }, LOCKOUT_RETRY_MS, TimeUnit.MILLISECONDS)
+                            }
+                        }
+                        // The hub could not read a frame: an ordinary failure, tried again with the normal back-off.
+                        "bad-frame" -> {
+                            close(LinkStatus.NotAtHome)
+                            later()
+                        }
+                        // Not paired, no code (a hub from 2a) or a code this phone does not know: stop trying at once
+                        // (and do not count against the hub's wrong-token limit).
+                        else -> close(LinkStatus.Refused(f.reason))
+                    }
                 }
                 else -> {}
             }
+        }
+
+        /** The hub closes with 4001 when the owner removed this phone: stop at once, record on, send nothing more. */
+        override fun onClosing(webSocket: WebSocket, code: Int, reason: String) = onLink {
+            if (webSocket != ws || code != REMOVED) return@onLink
+            close(LinkStatus.Refused("Your PC removed this phone. Pair again to link it."))
+            audit.add("Your PC", "remove this phone", outcome = "done")
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = onLink { gone(webSocket) }
@@ -250,6 +303,10 @@ class HubLink(
     companion object {
         private const val TAG = "MiniLink"
         const val PING_MS = 30_000L
+        const val LOCKOUT_RETRY_MS = 10 * 60_000L
+        /** The close code the hub uses when the owner removed this phone (docs/04). */
+        const val REMOVED = 4001
         const val FIND_EVERY_MS = 15 * 60_000L
+        const val CLEAN_EVERY_MS = 24 * 3_600_000L
     }
 }

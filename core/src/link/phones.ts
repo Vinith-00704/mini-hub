@@ -153,7 +153,8 @@ export class Phones {
       case 'state': {
         const { t: _t, collect, ...state } = f
         if (collect) this.#followPhone(deviceId, collect)
-        return this.#d.devices.setState(deviceId, { ...state, online: true })
+        // What the phone shares is replaced, not merged: one that stops sharing its battery no longer shows the old one.
+        return this.#d.devices.setState(deviceId, { battery: null, charging: null, network: null, needs: {}, ...state, online: true })
       }
       case 'waiting': {
         const p = this.#pending.get(f.id)

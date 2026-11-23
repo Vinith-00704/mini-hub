@@ -24,7 +24,7 @@ current documentation before using it; do not rely on memory for its API.
 | **Fastify** + **`ws`** | Small, typed routes with schema validation; WebSocket for live updates and the device link. | Bare `node:http` (fine for the bot's small runtime, tedious at this size). |
 | **`zod`** | One definition gives run-time checking and the TypeScript type, and exports JSON Schema for the phone side. | Hand-written checks. |
 | **SQLCipher** (`better-sqlite3-multiple-ciphers`) | One encrypted file, full-text search (FTS5) still works, no server. | Plain SQLite with encrypted columns (breaks search); `node:sqlite` (no encryption). |
-| **`imapflow`, `mailparser`, `nodemailer`** | The usual, maintained mail libraries for Node. | Gmail's API (needs a Google Cloud project and its review, for no gain here). |
+| **`imapflow`, `nodemailer`, `html-to-text`** (2.11.0, 10.4.0, 10.0.1, exact) | The usual, maintained mail libraries for Node: IMAP reading (with IDLE and peeks that never mark mail read), SMTP sending and building messages, and HTML mail turned into plain text. No `mailparser`: the hub fetches only a message's text part, never the whole message. | Gmail's API (needs a Google Cloud project and its review, for no gain here). |
 | **`bonjour-service`** | Announces the hub on the home network so the phone finds it without typing an address. | A fixed address typed by hand (kept as the fallback). |
 | **`@peculiar/x509`** (or `selfsigned`) | Makes the hub's own certificate at first start. | A public certificate (impossible for a home address). |
 | **`qrcode`** | The pairing code on screen. | n/a |

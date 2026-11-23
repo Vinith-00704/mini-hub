@@ -7,7 +7,7 @@ import { networkInterfaces, hostname } from 'node:os'
 import type { AddressInfo } from 'node:net'
 import { Bonjour } from 'bonjour-service'
 import { WebSocketServer, type WebSocket } from 'ws'
-import { LINK_PORT, linkFrame, type FrameOf, type LinkFrame } from '@minihub/protocol/link'
+import { LINK_PORT, linkFrame, type FrameOf, type LinkFrame, type REFUSED_CODES } from '@minihub/protocol/link'
 import type { Logger } from '../connectors/types.ts'
 import type { Store } from '../store/db.ts'
 import { privateAddresses } from './addresses.ts'
@@ -230,8 +230,9 @@ export class DeviceLink {
     setTimeout(() => c.ws.terminate(), 1000).unref()
   }
 
-  #refuse(c: Conn, reason: string): void {
-    c.ws.send(JSON.stringify({ t: 'refused', reason }))
+  /** `code` tells the phone what to do next (wait, pair again); the pairing path gives none. */
+  #refuse(c: Conn, reason: string, code?: (typeof REFUSED_CODES)[number]): void {
+    c.ws.send(JSON.stringify({ t: 'refused', reason, ...(code ? { code } : {}) }))
     c.ws.close(4003, 'refused')
     setTimeout(() => c.ws.terminate(), 1000).unref()
   }
@@ -251,7 +252,7 @@ export class DeviceLink {
     ws.on('error', () => {})
     const c: Conn = { ws, addr, missed: 0 }
     this.#conns.add(c)
-    if (!this.#guard.allowed(addr)) return this.#refuse(c, 'Too many wrong tries from this address. Try again in 10 minutes.')
+    if (!this.#guard.allowed(addr)) return this.#refuse(c, 'Too many wrong tries from this address. Try again in 10 minutes.', 'locked-out')
     // A knock with nothing said is dropped; pairing clears this (the owner may take a while to compare the words).
     const first = setTimeout(() => c.deviceId ?? ws.terminate(), FIRST_FRAME_MS)
     first.unref()
@@ -273,7 +274,7 @@ export class DeviceLink {
         parsed = linkFrame.safeParse(null)
       }
       if (!parsed.success) {
-        if (!c.deviceId) return this.#refuse(c, 'That is not something this hub understands.')
+        if (!c.deviceId) return this.#refuse(c, 'That is not something this hub understands.', 'bad-frame')
         this.o.log.warn({ device: c.deviceId }, 'a frame from a phone did not match the protocol')
         return
       }
@@ -309,10 +310,10 @@ export class DeviceLink {
       if (!right) this.#guard.failed(c.addr)
       return
     }
-    if (f.t !== 'hello') return this.#refuse(c, 'Say hello first.')
+    if (f.t !== 'hello') return this.#refuse(c, 'Say hello first.', 'bad-frame')
     if (!this.o.tokens.check(f.deviceId, f.token)) {
       this.#guard.failed(c.addr)
-      return this.#refuse(c, 'This phone is not paired with this hub, or it was removed. Pair it again.')
+      return this.#refuse(c, 'This phone is not paired with this hub, or it was removed. Pair it again.', 'not-paired')
     }
     this.#guard.succeeded(c.addr)
     const old = this.#byDevice.get(f.deviceId)

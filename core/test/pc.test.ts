@@ -3,7 +3,9 @@ import { z } from 'zod'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { pcConnector } from '../src/connectors/pc.ts'
 import { DeviceStore, Registry } from '../src/connectors/registry.ts'
+import { Secrets } from '../src/connectors/secrets.ts'
 import type { Connector } from '../src/connectors/types.ts'
+import { Grants } from '../src/rules/grants.ts'
 import { openStore, type Store } from '../src/store/db.ts'
 import { newKey, scratch } from './helpers.ts'
 
@@ -19,7 +21,7 @@ afterEach(() => {
 })
 
 const quietLog = { info() {}, warn() {}, error() {}, debug() {} }
-const registry = () => new Registry({ devices: new DeviceStore(db), emit: () => {}, log: quietLog })
+const registry = () => new Registry({ db, devices: new DeviceStore(db), emit: () => {}, log: quietLog, grants: new Grants(db), secrets: new Secrets(db) })
 
 describe('registry', () => {
   test('registry refuses an action without a risk', () => {

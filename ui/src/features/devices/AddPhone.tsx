@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, post } from '../../app/api.ts'
 import type { PairingStart, PairingView } from '../../app/queries.ts'
 import { Button } from '../../components/ui/Button.tsx'
+import { Munch } from '../../components/look/index.ts'
 import { Tile } from '../../components/ui/Tile.tsx'
 
 export function AddPhone({ onClose, pollMs = 1000 }: { onClose?: () => void; pollMs?: number }) {
@@ -75,8 +76,9 @@ export function AddPhone({ onClose, pollMs = 1000 }: { onClose?: () => void; pol
 
       {start && state === 'waiting' && (
         <div className="flex flex-col gap-3">
-          <p className="text-body text-ink-2">In the Mini app on your phone, open Hub, then Pair with a hub, and scan this.</p>
-          <div role="img" aria-label="Pairing code" className="w-56 self-start rounded-control bg-white p-2" dangerouslySetInnerHTML={{ __html: svg }} />
+          <p className="text-body text-ink-2">In the Mini app on your phone, open ⋮ → Your PC → Scan the code, and scan this.</p>
+          <div role="img" aria-label="Pairing code" className="w-56 self-start border-2 border-ink bg-white p-2 shadow-[4px_4px_0_var(--shadow)]" dangerouslySetInnerHTML={{ __html: svg }} />
+          <Munch width={224} label="Waiting for your phone" />
           <p className="text-small text-ink-2">
             Or type it: <span className="tabular font-medium text-ink">{start.address}</span> and the code{' '}
             <span className="tabular font-medium text-ink break-all">{start.code}</span>
@@ -91,10 +93,10 @@ export function AddPhone({ onClose, pollMs = 1000 }: { onClose?: () => void; pol
           <p className="text-body">
             <span className="font-medium">{view.deviceName}</span> wants to pair.
           </p>
-          <p className="text-head font-semibold">Do these match the words on your phone?</p>
+          <p className="text-[16px] font-extrabold uppercase">Do these match the words on your phone?</p>
           <ol className="flex flex-wrap gap-2">
             {view.words.map(w => (
-              <li key={w} className="rounded-control border border-line-strong bg-surface-2 px-3 py-2 text-[20px] font-semibold tracking-wide">
+              <li key={w} className="lk-drop border-2 border-ink bg-accent px-3 py-2 text-[22px] font-black tracking-wide text-on-accent uppercase shadow-[3px_3px_0_var(--shadow)]">
                 {w}
               </li>
             ))}

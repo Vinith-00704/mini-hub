@@ -14,7 +14,8 @@ import org.json.JSONTokener
 sealed interface Frame {
     data class Hello(val deviceId: String, val token: String, val appVersion: String, val lastSeq: Long, val time: Long) : Frame
     data class Welcome(val ackSeq: Long, val time: Long, val collect: Map<String, Boolean>, val settingsRev: Int) : Frame
-    data class Refused(val reason: String) : Frame
+    /** [code] is null from a hub without codes, and may be a value this phone does not know: both mean "not paired". */
+    data class Refused(val reason: String, val code: String? = null) : Frame
     data class Pair(val code: String, val commit: String, val deviceName: String, val model: String, val appVersion: String) : Frame
     data class PairNonce(val nonce: String) : Frame
     data class PairReveal(val nonce: String) : Frame
@@ -40,6 +41,8 @@ sealed interface Frame {
         val collect: Map<String, Boolean>?,
         val mini: Map<String, String>,
         val pc: Map<String, String>,
+        /** Per collected kind that nothing can serve yet, what is missing first. Sent only when not empty. */
+        val needs: Map<String, String> = emptyMap(),
     ) : Frame
 }
 
@@ -56,6 +59,7 @@ object Frames {
     private val GRANTS = setOf("off", "ask", "on")
     private val NETWORKS = setOf("wifi", "mobile", "none")
     private val BRAINS = setOf("ok", "asleep", "broken")
+    private val NEEDS = setOf("permission", "notification-access", "apps")
     private val HEX64 = Regex("^[0-9a-f]{64}$")
 
     private class Bad : Exception()
@@ -100,6 +104,15 @@ object Frames {
         }
     }
 
+    private fun needs(o: JSONObject?): Map<String, String> {
+        o ?: throw Bad()
+        return o.keys().asSequence().associateWith { k ->
+            val v = o.opt(k) as? String
+            if (k !in SCOPES || v !in NEEDS) throw Bad()
+            v!!
+        }
+    }
+
     private fun jsonText(v: Any?): String? = when (v) {
         null, JSONObject.NULL -> null
         is JSONObject, is JSONArray -> v.toString()
@@ -132,7 +145,7 @@ object Frames {
         when (o.opt("t")) {
             "hello" -> { o.version(); Frame.Hello(o.str("deviceId", 1, 100), o.str("token", 1, 200), o.str("appVersion", 0, 40), o.long("lastSeq"), o.long("time")) }
             "welcome" -> { o.version(); Frame.Welcome(o.long("ackSeq"), o.long("time"), collect(o.optJSONObject("collect")), o.long("settingsRev").toInt()) }
-            "refused" -> Frame.Refused(o.str("reason", 1, 300))
+            "refused" -> Frame.Refused(o.str("reason", 1, 300), o.optStr("code", 60))
             "pair" -> {
                 o.version()
                 val name = o.str("deviceName", 1, 60).trim()
@@ -190,6 +203,7 @@ object Frames {
                     collect = if (o.has("collect")) collect(o.optJSONObject("collect")) else null,
                     mini = grants(lists.optJSONObject("mini")),
                     pc = grants(lists.optJSONObject("pc")),
+                    needs = if (o.has("needs")) needs(o.optJSONObject("needs")) else emptyMap(),
                 )
             }
             else -> null
@@ -214,10 +228,13 @@ object Frames {
         e.event.data?.let { put("data", JSONObject(it)) }
     }
 
+    /** How many characters of JSON the item takes in an `events` frame. */
+    fun eventSize(e: StoredEvent): Int = eventJson(e).toString().length
+
     fun encode(f: Frame): String = when (f) {
         is Frame.Hello -> JSONObject().put("t", "hello").put("v", VERSION).put("deviceId", f.deviceId).put("token", f.token).put("appVersion", f.appVersion).put("lastSeq", f.lastSeq).put("time", f.time)
         is Frame.Welcome -> JSONObject().put("t", "welcome").put("v", VERSION).put("ackSeq", f.ackSeq).put("time", f.time).put("collect", map(f.collect)).put("settingsRev", f.settingsRev)
-        is Frame.Refused -> JSONObject().put("t", "refused").put("reason", f.reason)
+        is Frame.Refused -> JSONObject().put("t", "refused").put("reason", f.reason).apply { f.code?.let { put("code", it) } }
         is Frame.Pair -> JSONObject().put("t", "pair").put("v", VERSION).put("code", f.code).put("commit", f.commit).put("deviceName", f.deviceName).put("model", f.model).put("appVersion", f.appVersion)
         is Frame.PairNonce -> JSONObject().put("t", "pair-nonce").put("nonce", f.nonce)
         is Frame.PairReveal -> JSONObject().put("t", "pair-reveal").put("nonce", f.nonce)
@@ -245,6 +262,7 @@ object Frames {
             put("controlling", f.controlling)
             put("stopped", f.stopped)
             f.collect?.let { put("collect", map(it)) }
+            if (f.needs.isNotEmpty()) put("needs", map(f.needs))
             put("lists", JSONObject().put("mini", map(f.mini)).put("pc", map(f.pc)))
         }
     }.toString()

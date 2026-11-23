@@ -1,5 +1,6 @@
 package app.minihub.phone.ui
 
+import app.minihub.phone.data.NewEvent
 import app.minihub.phone.link.LinkStatus
 
 /** The plain words the phone's screens use, kept apart from the views so they can be tested. */
@@ -31,7 +32,30 @@ object Lines {
         "Mini" to (counts["mini_action"] ?: 0),
     )
 
-    private val KIND = mapOf("call" to "Call", "sms" to "Message", "chat" to "Message", "notification" to "Notification", "device_state" to "Phone state", "app_usage" to "App use", "mini_action" to "Mini")
+    private val CODE_WORD = Regex("""\b(otp|code|pin|passcode|verification)\b""", RegexOption.IGNORE_CASE)
+    private val DIGITS = Regex("""\b\d{4,8}\b""")
+
+    /** One-time codes are hidden in lists: when the text speaks of a code, every 4 to 8 digit number shows as dots. The full text shows when the row is tapped. */
+    fun mask(text: String): String = if (CODE_WORD.containsMatchIn(text)) DIGITS.replace(text, "••••••") else text
+
+    private val KIND =mapOf("call" to "Call", "sms" to "Message", "chat" to "Message", "notification" to "Notification", "device_state" to "Phone state", "app_usage" to "App use", "mini_action" to "Mini")
+
+    /** A record line's heading: a call is "Call · who", a notification "Notification · <app>". */
+    fun recordHead(e: NewEvent): String = when (e.type) {
+        "call" -> recordTitle(e.type, e.who, null)
+        "notification" -> recordTitle(e.type, e.app, null)
+        else -> recordTitle(e.type, e.who, e.title)
+    }
+
+    /** A record line's second line, before masking: a call's title ("Missed call"), a notification's "title: text", else the text. */
+    fun recordDetail(e: NewEvent): String? {
+        val text = when (e.type) {
+            "call" -> e.title
+            "notification" -> listOfNotNull(e.title, e.body).filter { it.isNotBlank() }.joinToString(": ")
+            else -> e.body ?: e.data?.replace(Regex("[{}\"]"), "")?.replace(",", ", ")?.replace(":", ": ")
+        }
+        return text?.takeIf { it.isNotBlank() }
+    }
 
     fun recordTitle(type: String, who: String?, title: String?): String {
         val kind = KIND[type] ?: type

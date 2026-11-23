@@ -13,7 +13,7 @@ export const MAX_WAIT_MS = 2000
 // Finished tickets are kept this long for a late poll, then forgotten.
 const KEEP_MS = 10 * 60 * 1000
 
-type Entry = { result?: TicketResult; waitingFor?: WaitingFor; waiters: Set<(r: TicketResult) => void>; at: number }
+type Entry = { result?: TicketResult; waitingFor?: WaitingFor; waiters: Set<(r: TicketResult) => void>; at: number; told?: boolean }
 
 export class Tickets {
   #all = new Map<string, Entry>()
@@ -28,6 +28,14 @@ export class Tickets {
   waitingFor(id: string, what: WaitingFor | undefined): void {
     const e = this.#all.get(id)
     if (e) e.waitingFor = what
+  }
+
+  /** True the first time a finished ticket's result is asked for: the one poll worth a row in the audit log. */
+  firstTold(id: string): boolean {
+    const e = this.#all.get(id)
+    if (!e?.result || e.told) return false
+    e.told = true
+    return true
   }
 
   settle(id: string, result: TicketResult): void {

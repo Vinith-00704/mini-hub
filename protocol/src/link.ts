@@ -34,7 +34,12 @@ export const linkEvent = z.object({
 
 const hello = z.object({ t: z.literal('hello'), v: z.literal(LINK_VERSION), deviceId: id, token: z.string().min(1).max(200), appVersion: z.string().max(40), lastSeq: z.number().int().nonnegative(), time })
 const welcome = z.object({ t: z.literal('welcome'), v: z.literal(LINK_VERSION), ackSeq: z.number().int().nonnegative(), time, collect, settingsRev: z.number().int().nonnegative() })
-const refused = z.object({ t: z.literal('refused'), reason: z.string().min(1).max(300) })
+// Why a hub refused: not paired (or token not known), too many wrong tries, or a frame it could not read.
+// `code` is absent from older hubs, and a refusal without it means 'not-paired'.
+export const REFUSED_CODES = ['not-paired', 'locked-out', 'bad-frame'] as const
+// What the phone still needs before a collect switch that is on can do anything, first missing thing first.
+export const NEEDS = ['permission', 'notification-access', 'apps'] as const
+const refused = z.object({ t: z.literal('refused'), reason: z.string().min(1).max(300), code: z.enum(REFUSED_CODES).optional() })
 const hex64 = z.string().regex(/^[0-9a-f]{64}$/)
 const nonce = z.string().min(16).max(100)
 // Pairing is a commit-then-reveal exchange: the phone commits to its random value, the hub answers with its own,
@@ -84,6 +89,8 @@ const state = z.object({
   stopped: z.boolean(),
   // The phone's own collect switches. The phone's switches win (docs/04 > Whose switches win): the hub's copy follows.
   collect: collect.optional(),
+  // Set by the phone only for a kind whose collect switch is on and that has no source able to run.
+  needs: z.partialRecord(scopeKey, z.enum(NEEDS)).optional(),
   lists: z.object({ mini: z.partialRecord(scopeKey, grantState), pc: z.partialRecord(scopeKey, grantState) }),
 })
 

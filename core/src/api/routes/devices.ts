@@ -45,13 +45,21 @@ export function deviceRoutes(app: FastifyInstance, hub: Hub): void {
     const id = (req.params as { id: string }).id
     const d = hub.devices.get(id)
     if (!d || d.id === 'hub') throw new ApiFailure(404, 'not-found', 'There is no such device.')
-    if (d.connectorId !== 'android') throw new ApiFailure(400, 'bad-request', `${d.name} is part of the hub and cannot be removed.`)
+    // A phone, or a device whose connector can let go of it (a mail account). This PC and Mini are part of the hub.
+    const connector = hub.registry.get(d.connectorId)
+    if (d.connectorId !== 'android' && !connector?.remove) throw new ApiFailure(400, 'bad-request', `${d.name} is part of the hub and cannot be removed.`)
     const { deleteEvents } = z.object({ deleteEvents: z.boolean().optional() }).parse(req.body ?? {})
-    hub.removeDevice(id, deleteEvents === true)
+    if (d.connectorId === 'android') hub.removeDevice(id, deleteEvents === true)
+    else {
+      try {
+        await connector?.remove?.(id)
+      } catch {
+        // Never the error's own text: it can carry a server's raw answer. The device stays, so the owner can try again.
+        hub.log.warn({ connector: d.connectorId }, 'a device could not be removed')
+        throw new ApiFailure(500, 'unavailable', `${d.name} could not be removed. Try again.`)
+      }
+      hub.forgetDevice(id, deleteEvents === true)
+    }
     return { removed: id }
   })
-
-  app.get('/v1/connectors', { config: { access: 'both' } }, async () => ({
-    items: hub.registry.list().map(c => ({ id: c.manifest.id, name: c.manifest.name, kind: c.manifest.kind, icon: c.manifest.icon, ...c.health() })),
-  }))
 }

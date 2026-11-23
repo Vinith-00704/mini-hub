@@ -41,6 +41,16 @@ code. Each has a pass mark and what happens if it fails. Run T1 first: it decide
   - The two-hour run with the screen off is below once done. The processes in this trial were started over USB
     (`run-as`), not by the Termux app, so Android may treat the real setup differently; T6 checks that.
 
+- **T4, not run yet.** Phase 2's collectors are built (app 0.4.0, 2026-11-23). T4 is the owner's own check with
+  their real call, SMS and chats, following "Owner steps" in `docs/superpowers/plans/2026-11-23-phone-record.md`.
+  Write what was read correctly, what could not be read, and whether Android asked for restricted settings here.
+- **Phase 3 trial, not run yet.** Mini on the phone is built (app 0.5.0, Mini Bot 0.8.0, 2026-11-23). The voice
+  question with the PC off and the other "Done when" lines are the owner's to run, following "Owner steps" in
+  `docs/superpowers/plans/2026-11-23-mini-on-phone.md`.
+- **Phase 4, built 2026-11-23, checks by hand not run yet.** Mini's hub tools (Mini Bot 0.9.0), the mail connector,
+  boards, the tile gallery, the command box, retention, export and import. The owner's checks are in
+  `docs/superpowers/reports/2026-11-23-phases-2b-3-4.md`.
+
 Trials T1 and T6 touch the owner's daily phone. Agree a time with them, and read "Testing safely" below first.
 
 **Needs installing first**: the Rust toolchain and the Visual Studio C++ build tools on the PC (for T2); `nodejs`,
@@ -199,8 +209,8 @@ way in; the PC as a device other PCs can control.
   need the real device. On the real phone: install only the test build for the current phase; never type with
   `adb input` (an open Claude Code session in Termux takes it as a prompt); never lock, wake or restart it
   without asking; remove test builds and their data when the trial is over.
-- **Mail.** Test against a local IMAP test server with made-up mail. The owner's real account is connected only
-  by the owner, in the installed app.
+- **Mail.** No mail test server and no made-up mail (the owner's rule for Phases 2b–7). The owner connects their own
+  account in the installed app and checks by hand; the code is checked by type checks, builds and the existing suites.
 - **The Alexa route.** Test the signature check with recorded, made-up requests. The tunnel is opened only by the owner.
 
 ## Tests every phase keeps green

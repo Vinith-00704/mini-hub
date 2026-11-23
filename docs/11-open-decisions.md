@@ -55,6 +55,10 @@ that. Moving means uninstalling Termux and redoing the Claude Code install and s
 
 **Default**: move to the F-Droid build before Phase 3, and keep USB debugging off when it is not in use.
 
+The phone app's setup screen (Mini's brain) shows which build is installed (step "Termux is the F-Droid build": not
+done while Termux is a debug build) and says how to move. It is advice only and never blocks Start; the decision stays
+the owner's.
+
 ### D6. If Claude Code on the phone stops working
 
 **Needed by**: Phase 3. The Termux route is unofficial.
@@ -149,7 +153,7 @@ Not asked of the owner, because a sensible default existed. Each can be changed;
 | The Mini screen shows this run's conversation only, kept in memory | The bot's runtime keeps no history; storing replies is a separate choice | `05` |
 | Actions for an offline phone fail; they are never queued | A late action is a wrong action | `01`, `04` |
 | Sync on the home Wi-Fi only | D4 | `04` |
-| Mail through IMAP with an app password | No third party, no Google Cloud project | `06` |
+| Mail through IMAP with an app password | No third party, no Google Cloud project. No OAuth. Gmail works with an app password (2-Step Verification on). Microsoft has been turning app passwords off for Outlook.com and Microsoft 365: the Outlook choice is offered, and if Microsoft refuses the sign-in the wizard says this version cannot connect that account | `06` |
 | No wake word on the phone; no location | Battery and privacy | D8, `08` |
 | Geist fonts, a dark default, the accent taken from the bot | A calm look that is the owner's own | `07` |
 

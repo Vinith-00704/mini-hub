@@ -99,6 +99,11 @@ A scope names one thing that can be granted. This is the canonical list; `protoc
 
 The "Kind" column is the scope's usual risk; each action's own risk is fixed in its connector (`06`).
 
+The phone has one scope of its own, not in this list or the hub's: `phone.status.read` ("Phone status", read,
+off), the "Mini on this phone" switch for Mini's `phone_status` tool. It has no Collect or "From my PC" switch of its
+own and is not sent to the hub (the protocol lists it apart, in `PHONE_ONLY_SCOPES`, so the hub offers no grant for it, yet a
+`mini_action` may name it as its `scope`); it also needs Collect on for `phone.usage.read` (`08` > The hands endpoint).
+
 The PC's own access (screen, microphone, computer control, full access) stays with the Mini Bot's permission
 system. The hub shows those switches and links to the bot for changing them; it does not duplicate them.
 
@@ -142,6 +147,9 @@ Rules:
   **on**. The phone takes the paired hub's word for it: that is what pairing means. Setting the switch to **ask**
   makes the phone ask as well; **off** refuses.
 - It expires (default 2 minutes) and then counts as "no". A second identical request needs a second approval.
+- When the hub starts, every approval still waiting from before is expired (with the refused row its request would
+  have had in the audit log): what runs on a yes lived in the hub that stopped, so a late Yes on such a card answers
+  "This question has expired. Ask Mini again." instead of doing nothing.
 - "Always allow this" is offered only for `act` actions, sets that scope's grant to **on**, and says so. It is never
   offered for `important` actions.
 - The phone app's accessibility service refuses to tap anything in the phone app's own windows, so Mini cannot
@@ -149,12 +157,17 @@ Rules:
 
 ## The audit log
 
-- One row for every read by the agent, every action by anyone, every approval and refusal, every grant change,
-  every pairing and removal, every start and stop, and every stop-button press.
+- One row for every read by the agent (a ticket poll: one row, when it first gets the answer), every action by anyone,
+  every approval and refusal, every grant change, every pairing and removal, every start and stop, and every
+  stop-button press.
 - Each row: when, who (caller and detail), what, on what, the risk, the outcome, and the hash of the row before
   it plus its own. A broken chain shows in the dashboard as a warning.
 - The agent can read only the rows about its own actions. Nothing can edit a row. Only the person can export or
   clear the log, and clearing writes a row that says it was cleared.
+- **Pruning** (Settings > Data, a year by default, `04` > What is kept): rows older than the owner keeps go in one
+  transaction, and the hash of the newest row removed is kept as the chain's anchor (`meta` `auditAnchor`). The
+  check walks from the anchor instead of from zero, and a new row on an emptied log chains to it, so the chain stays
+  checkable. A `system` row `prune-audit` with `{ count }` says how many went. Backups never carry the audit log.
 - The phone keeps its own log the same way and sends it to the hub as events.
 - Message and mail **text is not copied into the log**. The log says "read 3 messages from Asha", with the event ids.
 
@@ -199,15 +212,30 @@ A turn the owner starts at the bot or the dashboard is not a voice turn, even if
 Claude Code has tools of its own (running commands, reading and writing files, fetching web pages). On the PC
 they are governed by Claude Code's own permission system and the Mini Bot's rules, as today. On the phone they
 could reach the phone around the phone app (Android's `am` command, Termux's own helpers, a direct call to the
-hands endpoint), so the phone session is started with them shut:
+hands endpoint), so the phone session is started with them shut. The limits are Claude Code's command-line flags in
+`~/.mini/session.sh`, which the app's start script writes afresh at every start (so nothing can keep a change to it);
+they are not a Claude Code settings file, and the app never writes Termux's or Claude Code's settings
+(`08`, "Mini's brain on the phone"):
 
 - Permission mode `dontAsk`: anything not allowed in advance is refused without a question, so a session with
   no terminal on screen can never hang on a prompt.
-- Allowed: the `phone_*` tools, the Mini Bot's own harmless tools (routines, bot design), web search and fetch,
-  and reading and writing files inside one work folder (`~/.mini/work`).
-- Refused: running commands, and any file outside the work folder.
+- Allowed (`--allowedTools`): the `phone_*` tools, the Mini Bot's own harmless tools (routines, bot design), and
+  reading and writing files inside one work folder (`~/.mini/work`):
+  `mcp__mini-bot__phone_status`, `mcp__mini-bot__phone_read`, `mcp__mini-bot__add_routine`,
+  `mcp__mini-bot__list_routines`, `mcp__mini-bot__remove_routine`, `mcp__mini-bot__design_bot`,
+  `mcp__mini-bot__get_bot`, `Read(~/.mini/work/**)`, `Edit(~/.mini/work/**)`.
+- Refused (`--disallowedTools`): running commands, web search and fetch (a message read with `phone_read` could
+  otherwise be sent to a web address), Claude Code's own questions and plan mode, and the files that hold keys or
+  settings: `Bash`, `NotebookEdit`, `WebFetch`, `WebSearch`, `AskUserQuestion`, `EnterPlanMode`, `ExitPlanMode`,
+  `Read(~/.mini/home/**)`, `Read(~/.mini/tmp/**)`, `Read(~/.claude/**)`, `Read(~/.claude.json)`, `Read(~/.termux/**)`,
+  `Edit(~/.claude/**)`, `Edit(~/.termux/**)`, `Edit(~/.mini/*.sh)`, `Edit(~/.mini/tmp/**)`, `Edit(~/.mini/work/.claude/**)`,
+  `Edit(~/.mini/work/.mcp.json)`.
+  Deny wins over allow in Claude Code, so the work folder's `.claude/` and `.mcp.json` stay shut and Mini cannot
+  widen its own limits from inside its folder. Anything in neither list (any other file) is refused by `dontAsk`.
 
-The owner can open this up in `11` (D14). Until then, the phone app's switches are the only way to the phone.
+The owner's own Claude Code settings in Termux still apply on top of these flags; the app's setup screen reads them
+and says when they allow more. The owner can open this up in `11` (D14). Until then, the phone app's switches are
+the only way to the phone.
 
 ## Keys and secrets
 
@@ -220,6 +248,11 @@ The owner can open this up in `11` (D14). Until then, the phone app's switches a
 | Device tokens | The device's own key store. The hub keeps a hash only. | Removing a device deletes the hash. |
 | Mail password or token, the Alexa skill's id, any home-device keys | Inside the encrypted database | Shown in the dashboard as "set", never shown back |
 | Phone database key | Android Keystore | Never leaves the phone |
+| The phone's overlay key and hands token | Memory only (the phone app, and Mini's runtime in Termux) | New at every start of the brain. They reach the runtime only on the start script's standard input and through a one-use fifo; never on a command line, in an environment variable, a file or a log. The app sends the overlay key (with the runtime's token) only to a runtime that has just proved itself (`08`); the hands token reaches the runtime only once, through the fifo at the start. The fifo sits in `~/.mini/tmp` (mode 700), which is not Claude Code's temporary folder and which Mini's session may neither read nor change. |
+| The phone runtime's token | Memory in the app; `~/.mini/home/runtime.json` in Termux (denied to Mini's session by name) | Made by the runtime at each start; reaches the app only in the start script's `MINI_READY` line, through the app's own pending intent |
+| Residual: Termux's own logs | Termux | At Termux's log level **Verbose** it logs the start command's standard input (the overlay key, the hands address and token); at **Debug** it logs the script's output (the runtime's token). If Termux cannot hand the answer back to the app (the app was force-stopped during a start) and its plugin error notifications are on, the notification's report holds the same. The default level, **Normal**, logs neither: keep Termux at Normal. The setup screen checks it (Task 6 of Phase 3). |
+| Residual: the moment after the phone runtime dies | Loopback | The proof and the keyed request after it are two connections. A program that takes the runtime's port in the milliseconds between them (after the runtime died) could get one keyed request: the overlay key and the runtime's token, which then fit no runtime, since every start makes new ones. Accepted as residual risk. |
+| Residual: the phone's copy of Mini Bot | `~/.mini/plugin` in Termux | The first clone and every Update Mini Bot take the head of the Mini Bot repository's default branch, checked only by HTTPS and git, not pinned or signed. That code runs as Mini's runtime and plugin, next to the keys. Accepted as residual risk: the repository is the owner's own. |
 | The phone app's signing key | A keystore file outside the repository or in `local/`, with its passwords in an ignored properties file | Losing it means the next version cannot be installed over the old one |
 
 Logs never contain a secret, a message body, a mail body, or a full phone number or address: the logger redacts

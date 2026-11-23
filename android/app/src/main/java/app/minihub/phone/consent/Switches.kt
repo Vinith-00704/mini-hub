@@ -37,7 +37,8 @@ class Switches(private val prefs: Prefs) {
     }
 
     fun setPc(scope: String, g: Grant) {
-        if (PhoneScopes.find(scope) == null) return
+        // The phone's own scopes have no "From my PC" switch.
+        if (PhoneScopes.find(scope)?.phoneOnly != false) return
         prefs.put("pc:$scope", g.wire)
         told()
     }
@@ -54,9 +55,11 @@ class Switches(private val prefs: Prefs) {
     /** Forgetting the hub starts its numbering again. */
     fun forgetHub() = prefs.put("hubRev", null)
 
-    /** The phone's two lists, as sent to the hub in the state frame. */
-    fun lists(): Pair<Map<String, String>, Map<String, String>> =
-        PhoneScopes.ALL.associate { it.id to mini(it.id).wire } to PhoneScopes.ALL.associate { it.id to pc(it.id).wire }
+    /** The phone's two lists, as sent to the hub in the state frame: only the scopes the hub knows. */
+    fun lists(): Pair<Map<String, String>, Map<String, String>> {
+        val shared = PhoneScopes.ALL.filter { !it.phoneOnly }
+        return shared.associate { it.id to mini(it.id).wire } to shared.associate { it.id to pc(it.id).wire }
+    }
 
     fun onChange(fn: () -> Unit): () -> Unit {
         listeners.add(fn)

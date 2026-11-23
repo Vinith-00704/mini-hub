@@ -1,0 +1,563 @@
+/* The parts of the Claude look (docs/superpowers/specs/2026-11-22-claude-look-design.md > The parts). */
+
+.lk-label {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: var(--t-label);
+  line-height: var(--t-label-lh);
+}
+
+/* Window: a card with a title bar of three hollow squares. */
+.lk-win {
+  background: var(--card);
+  border: var(--outline) solid var(--ink);
+  box-shadow: var(--shadow-card) var(--shadow-card) 0 var(--shadow);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.lk-win-bar {
+  background: var(--card-bar);
+  border-bottom: var(--outline) solid var(--ink);
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+}
+.lk-sq {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.lk-sq i {
+  width: 9px;
+  height: 9px;
+  border: 1.6px solid var(--ink);
+  display: block;
+}
+.lk-win-title {
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lk-win-body {
+  padding: var(--pad-tile);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+/* Buttons: hard shadow; pressing moves the button into its shadow. */
+.lk-btn {
+  border: var(--outline) solid var(--ink);
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: var(--shadow-button) var(--shadow-button) 0 var(--shadow);
+  font-family: var(--font-sans);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 12px;
+  padding: 0 14px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 80ms steps(2), box-shadow 80ms steps(2);
+  user-select: none;
+}
+.lk-btn:hover {
+  filter: brightness(1.08);
+}
+.lk-btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--shadow);
+}
+.lk-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.lk-btn.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.lk-btn.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.lk-btn.danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: #000;
+  filter: none;
+}
+.lk-btn.stop {
+  background: var(--danger);
+  color: #000;
+}
+.lk-btn.ghost {
+  box-shadow: none;
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-2);
+}
+.lk-btn.ghost:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+.lk-btn.sm {
+  height: 28px;
+  font-size: 11px;
+  padding: 0 10px;
+}
+
+/* Tags and chips */
+.lk-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1.6px solid var(--ink);
+  padding: 1px 6px;
+  font-weight: 800;
+  font-size: 10.5px;
+  line-height: 14px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--card);
+  color: var(--ink);
+}
+.lk-tag.pill {
+  border-radius: 999px;
+  padding: 1px 9px;
+}
+.lk-tag.ok {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.lk-tag.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.lk-tag.warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.lk-tag.muted {
+  border-color: var(--ink-3);
+  color: var(--ink-3);
+}
+.lk-tag.fill {
+  background: var(--ink);
+  color: var(--card);
+}
+.lk-tag.accent {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--ink);
+}
+.lk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 7px;
+  border: 1.6px solid;
+  line-height: 16px;
+  font-family: var(--font-mono);
+}
+.lk-chip.up {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.lk-chip.down {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.lk-chip.flat {
+  color: var(--ink-3);
+  border-color: var(--ink-3);
+}
+
+/* Field */
+.lk-field {
+  border: var(--outline) solid var(--ink);
+  background: var(--card);
+  height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 8px;
+  min-width: 0;
+}
+.lk-field:focus-within {
+  border-color: var(--accent);
+}
+.lk-field > b {
+  color: var(--accent-ink);
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+.lk-field input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.lk-field input::placeholder {
+  color: var(--ink-3);
+}
+
+/* Segments, bars, stripes */
+.lk-seg {
+  display: flex;
+  gap: 4px;
+}
+.lk-seg i {
+  flex: 1;
+  height: 14px;
+  border: 1.6px solid var(--ink);
+  display: block;
+  background: var(--card);
+}
+.lk-seg i.f {
+  background: var(--accent);
+}
+.lk-seg i.k {
+  background: var(--ink);
+}
+.lk-seg i.e {
+  border-style: dashed;
+  border-color: var(--ink-3);
+}
+.lk-bar {
+  border: var(--outline) solid var(--ink);
+  height: 18px;
+  background: var(--card);
+  position: relative;
+  overflow: hidden;
+}
+.lk-bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--accent);
+  display: block;
+  border-right: var(--outline) solid var(--ink);
+  transition: width 300ms steps(6);
+}
+.lk-stripes {
+  background: repeating-linear-gradient(-45deg, var(--ink) 0 9px, var(--card) 9px 18px);
+  border: var(--outline) solid var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lk-stripes.moving {
+  background-size: 25.46px 25.46px;
+  animation: lk-stripes 1.6s steps(8) infinite;
+}
+.lk-stripes > span {
+  background: var(--ink);
+  color: var(--card);
+  font-weight: 900;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 3px 10px;
+  text-transform: uppercase;
+}
+@keyframes lk-stripes {
+  to {
+    background-position: 25.46px 0;
+  }
+}
+
+/* Rows */
+.lk-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--soft);
+  min-width: 0;
+}
+.lk-row:last-child {
+  border-bottom: 0;
+}
+.lk-ib {
+  width: 28px;
+  height: 28px;
+  border: 1.6px solid var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.lk-ib.acc {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Switch: a square track; ON / OFF beside it */
+.lk-switch {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--ink);
+}
+.lk-switch .track {
+  width: 38px;
+  height: 20px;
+  border: var(--outline) solid var(--ink);
+  background: var(--card);
+  position: relative;
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+.lk-switch .knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  background: var(--ink-3);
+  transition: left 120ms steps(3);
+}
+.lk-switch[aria-checked='true'] .track {
+  background: var(--accent);
+}
+.lk-switch[aria-checked='true'] .knob {
+  left: 20px;
+  background: var(--on-accent);
+}
+.lk-switch .word {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  width: 26px;
+  text-align: left;
+}
+.lk-switch:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Choice: OFF · ASK · ON */
+.lk-choice {
+  align-self: flex-start;
+  display: inline-flex;
+  border: var(--outline) solid var(--ink);
+  border-radius: 999px;
+  padding: 2px;
+  gap: 2px;
+  background: var(--card);
+}
+.lk-choice button {
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font-weight: 800;
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+.lk-choice button[aria-checked='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.lk-choice button[aria-checked='true'].off {
+  background: var(--ink-3);
+  color: var(--card);
+}
+
+/* Skeleton: the shape with stripes moving through it */
+.lk-skel {
+  background: repeating-linear-gradient(-45deg, var(--soft) 0 8px, transparent 8px 16px);
+  background-size: 22.6px 22.6px;
+  animation: lk-stripes 1.2s steps(6) infinite;
+  border: 1.6px dashed var(--ink-3);
+}
+
+/* Dash box */
+.lk-dash {
+  border: var(--outline) dashed var(--ink-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-3);
+}
+
+/* --- Retro motion: everything in steps, like an 8-bit game --- */
+@keyframes lk-bob {
+  50% {
+    transform: translateY(-2px);
+  }
+}
+@keyframes lk-bob-fast {
+  50% {
+    transform: translateY(-3px);
+  }
+}
+@keyframes lk-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes lk-cursor {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes lk-zzz {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(6px, -14px);
+    opacity: 0;
+  }
+}
+@keyframes lk-drop {
+  from {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.lk-bot.idle {
+  animation: lk-bob 1.6s steps(2) infinite;
+}
+.lk-bot.thinking,
+.lk-bot.working {
+  animation: lk-bob-fast 0.5s steps(2) infinite;
+}
+.lk-bot.asleep {
+  animation: lk-blink 2.4s steps(2) infinite;
+  filter: saturate(0.4);
+}
+.lk-zzz {
+  position: absolute;
+  right: -6px;
+  top: -4px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 10px;
+  color: var(--ink-3);
+  animation: lk-zzz 2.4s steps(6) infinite;
+}
+.lk-cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.1em;
+  background: var(--accent);
+  vertical-align: text-bottom;
+  animation: lk-cursor 1s steps(1) infinite;
+}
+.lk-drop {
+  animation: lk-drop 240ms steps(3) both;
+}
+
+/* Munch: Mini walks along a row of dots and eats them */
+.lk-munch {
+  position: relative;
+  height: 20px;
+  overflow: hidden;
+}
+.lk-munch .dots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(var(--ink-2) 2.2px, transparent 2.4px);
+  background-size: 16px 20px;
+  background-position: 8px 0;
+}
+.lk-munch .eaten {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--card);
+  animation: lk-eat var(--munch-ms, 2400ms) steps(var(--munch-steps, 16)) infinite;
+}
+.lk-munch .walker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  animation: lk-walk var(--munch-ms, 2400ms) steps(var(--munch-steps, 16)) infinite;
+}
+.lk-munch .walker .a {
+  animation: lk-chomp 0.3s steps(1) infinite;
+}
+.lk-munch .walker .b {
+  animation: lk-chomp 0.3s steps(1) infinite reverse;
+}
+@keyframes lk-walk {
+  from {
+    transform: translateX(-22px);
+  }
+  to {
+    transform: translateX(var(--munch-w, 260px));
+  }
+}
+@keyframes lk-eat {
+  from {
+    width: 0;
+  }
+  to {
+    width: calc(var(--munch-w, 260px) + 22px);
+  }
+}
+@keyframes lk-chomp {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lk-bot,
+  .lk-zzz,
+  .lk-munch .walker,
+  .lk-munch .eaten,
+  .lk-munch .walker .a,
+  .lk-munch .walker .b,
+  .lk-stripes.moving,
+  .lk-skel,
+  .lk-cursor,
+  .lk-drop,
+  .lk-dots i {
+    animation: none !important;
+  }
+  .lk-munch .walker .b {
+    opacity: 0;
+  }
+}

@@ -101,6 +101,15 @@ export class Approvals {
     for (const w of waiting) this.#changed(this.#set(w.id, 'no'))
   }
 
+  /**
+   * At start-up: every question still waiting is expired. What runs on a yes lived in the hub that stopped, so a yes
+   * now would do nothing; expired, a late press gets "This question has expired. Ask Mini again."
+   */
+  expireAll(): Approval[] {
+    const waiting = this.#db.prepare("SELECT id FROM approvals WHERE state = 'waiting'").all() as Array<{ id: string }>
+    return waiting.map(w => this.#changed(this.#set(w.id, 'expired')))
+  }
+
   list(limit = 50): Approval[] {
     return (this.#db.prepare('SELECT * FROM approvals ORDER BY requested_at DESC, rowid DESC LIMIT ?').all(limit) as Raw[]).map(toApproval).reverse()
   }

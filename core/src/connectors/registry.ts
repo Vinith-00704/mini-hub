@@ -1,9 +1,13 @@
 // The connectors the core knows, and the devices they bring.
 
 import { isScope, type NewEvent } from '@minihub/protocol'
+import { z } from 'zod'
+import { grantTarget } from '../events.ts'
 import type { Store } from '../store/db.ts'
 import { ApiFailure } from '../rules/policy.ts'
-import type { ActionDef, ActionInfo, Connector, Device, DeviceAccess, DeviceInput, Logger } from './types.ts'
+import type { Grants } from '../rules/grants.ts'
+import type { Secrets } from './secrets.ts'
+import type { ActionDef, ActionInfo, Connector, Ctx, Device, DeviceAccess, DeviceInput, Logger, SettingsAccess } from './types.ts'
 
 type RawDevice = {
   id: string
@@ -96,11 +100,42 @@ export class DeviceStore implements DeviceAccess {
   }
 }
 
-type Deps = { devices: DeviceStore; emit: (e: NewEvent & { deviceId: string }) => void; log: Logger }
+type Deps = {
+  db: Store
+  devices: DeviceStore
+  emit: (e: NewEvent & { deviceId: string }) => void
+  log: Logger
+  grants: Grants
+  secrets: Secrets
+  now?: () => number
+}
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/** A connector's own settings, in `connectors.settings_json`. Keys whose value is undefined are dropped when written. */
+const settingsFor = (db: Store, id: string, now: () => number): SettingsAccess => ({
+  get() {
+    const r = db.prepare('SELECT settings_json FROM connectors WHERE id = ?').get(id) as { settings_json: string } | undefined
+    return r ? (JSON.parse(r.settings_json) as Record<string, unknown>) : {}
+  },
+  set(patch) {
+    db.transaction(() => {
+      const r = db.prepare('SELECT settings_json FROM connectors WHERE id = ?').get(id) as { settings_json: string } | undefined
+      const next: Record<string, unknown> = r ? (JSON.parse(r.settings_json) as Record<string, unknown>) : {}
+      // One level deep: an object value is merged into the object already there, anything else replaces it.
+      for (const [k, v] of Object.entries(patch)) next[k] = isPlainObject(v) && isPlainObject(next[k]) ? { ...next[k], ...v } : v
+      db.prepare(
+        'INSERT INTO connectors (id, enabled, settings_json, updated_at) VALUES (?, 1, ?, ?) ON CONFLICT (id) DO UPDATE SET settings_json = excluded.settings_json, updated_at = excluded.updated_at',
+      ).run(id, JSON.stringify(next), now())
+    })()
+  },
+})
 
 export class Registry {
   #deps: Deps
   #connectors = new Map<string, Connector>()
+  #ctx = new Map<string, Ctx>()
+  #args = new Map<string, Record<string, unknown>>()
   #abort = new AbortController()
 
   constructor(deps: Deps) {
@@ -115,7 +150,38 @@ export class Registry {
       if (!['read', 'act', 'important'].includes(a.risk)) throw new Error(`${where} has no risk.`)
       if (a.risk !== 'read' && typeof a.describe !== 'function') throw new Error(`${where} has no describe.`)
     }
+    for (const [name, a] of Object.entries(c.actions)) {
+      // What the arguments look like as they are sent. A schema zod cannot describe is listed as {} rather than stopping the hub.
+      let schema: Record<string, unknown> = {}
+      try {
+        schema = z.toJSONSchema(a.args, { io: 'input' }) as Record<string, unknown>
+      } catch {
+        this.#deps.log.warn({ connector: c.manifest.id, action: name }, 'action arguments cannot be described')
+      }
+      this.#args.set(`${c.manifest.id}.${name}`, schema)
+    }
     this.#connectors.set(c.manifest.id, c)
+  }
+
+  /** The one context a connector gets: its own secrets and settings, the shared devices, and read-only switches. */
+  ctx(id: string): Ctx {
+    const known = this.#ctx.get(id)
+    if (known) return known
+    const { db, devices, emit, log, grants, secrets } = this.#deps
+    const ctx: Ctx = {
+      emit,
+      devices,
+      log,
+      signal: this.#abort.signal,
+      secrets: secrets.for(id),
+      settings: settingsFor(db, id, this.#deps.now ?? Date.now),
+      grants: {
+        collecting: (deviceId, scope) => grants.get(grantTarget(scope, deviceId), scope).collect,
+        onChange: fn => grants.onChange(fn),
+      },
+    }
+    this.#ctx.set(id, ctx)
+    return ctx
   }
 
   get(id: string): Connector | undefined {
@@ -129,7 +195,7 @@ export class Registry {
   async startAll(): Promise<void> {
     for (const c of this.#connectors.values()) {
       try {
-        await c.start({ emit: this.#deps.emit, devices: this.#deps.devices, log: this.#deps.log, signal: this.#abort.signal })
+        await c.start(this.ctx(c.manifest.id))
       } catch (error) {
         this.#deps.log.error({ connector: c.manifest.id, err: String(error) }, 'connector did not start')
       }
@@ -150,6 +216,7 @@ export class Registry {
         scope: a.scope,
         risk: a.risk,
         personOnly: a.personOnly === true,
+        args: this.#args.get(`${c.manifest.id}.${name}`) ?? {},
       })),
     )
   }
